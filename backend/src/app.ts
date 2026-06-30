@@ -4,6 +4,9 @@ import helmet from 'helmet';
 
 import { env } from './config/env.js';
 import { healthRouter } from './features/health/health.routes.js';
+import { interviewSessionRouter } from './features/interview-session/interview-session.routes.js';
+import { problemsRouter } from './features/problems/problems.routes.js';
+import { voiceRouter } from './features/voice/voice.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 
 export const createApp = () => {
@@ -25,6 +28,9 @@ export const createApp = () => {
   });
 
   app.use('/health', healthRouter);
+  app.use('/problems', problemsRouter);
+  app.use('/interviews', interviewSessionRouter);
+  app.use('/voice', voiceRouter);
   app.use(errorHandler);
 
   return app;
