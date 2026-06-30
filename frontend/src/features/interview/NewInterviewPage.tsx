@@ -66,7 +66,9 @@ export const NewInterviewPage = () => {
       const session = await createInterview({ mode, problemId: problemId || undefined });
       navigate(`/interview/${session.id}`);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not start the interview. Try again.');
+      setError(
+        caught instanceof ApiError ? caught.message : 'Could not start the interview. Try again.',
+      );
       setIsStarting(false);
     }
   };
@@ -76,8 +78,8 @@ export const NewInterviewPage = () => {
       <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">New interview</p>
       <h1 className="mt-3 text-4xl font-bold text-ink">Choose how you want to be interviewed</h1>
       <p className="mt-4 max-w-2xl leading-7 text-graphite">
-        Alex Chen, your interviewer, will run the session like a real FAANG loop: mostly listening, speaking only
-        when it matters.
+        Alex Chen, your interviewer, will run the session like a real FAANG loop: mostly listening,
+        speaking only when it matters.
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -97,7 +99,11 @@ export const NewInterviewPage = () => {
               ].join(' ')}
             >
               <div className="flex items-center justify-between">
-                <Icon className={isSelected ? 'text-signal' : 'text-graphite'} size={22} aria-hidden="true" />
+                <Icon
+                  className={isSelected ? 'text-signal' : 'text-graphite'}
+                  size={22}
+                  aria-hidden="true"
+                />
                 {isSelected && <span className="text-xs font-semibold text-signal">Selected</span>}
               </div>
               <h2 className="mt-4 font-semibold text-ink">{option.label}</h2>
@@ -109,7 +115,9 @@ export const NewInterviewPage = () => {
 
       {problems.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Pick a problem</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
+            Pick a problem
+          </h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <button
               type="button"

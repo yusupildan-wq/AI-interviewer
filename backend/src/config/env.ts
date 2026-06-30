@@ -24,9 +24,16 @@ export const env = {
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
   databaseUrl: process.env.DATABASE_URL,
   groqApiKey: process.env.GROQ_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
   decisionEngineModel: process.env.DECISION_ENGINE_MODEL ?? 'openai/gpt-oss-120b',
   decisionEngineReasoningEffort: process.env.DECISION_ENGINE_REASONING_EFFORT ?? 'high',
   speechToTextModel: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
+  voiceProvider: process.env.VOICE_PROVIDER ?? 'openai',
+  openaiTextToSpeechModel: process.env.OPENAI_TTS_MODEL ?? 'gpt-4o-mini-tts',
+  openaiTextToSpeechVoice: process.env.OPENAI_TTS_VOICE ?? 'marin',
+  openaiTextToSpeechInstructions:
+    process.env.OPENAI_TTS_INSTRUCTIONS ??
+    'Speak like a calm, natural senior technical interviewer on a video call. Sound conversational, warm, and human. Use subtle pauses, natural pacing, and mild intonation. Do not sound like a narrator, announcer, or robot.',
   textToSpeechModel: process.env.TTS_MODEL ?? 'canopylabs/orpheus-v1-english',
   textToSpeechVoice: process.env.TTS_VOICE ?? 'troy',
 };

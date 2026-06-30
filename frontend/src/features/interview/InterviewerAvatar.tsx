@@ -17,14 +17,20 @@ interface InterviewerAvatarProps {
   state: AvatarState;
   /** 0-1 real-time speech amplitude, used to drive the mouth while speaking. */
   audioLevel?: number;
+  className?: string;
 }
 
-export const InterviewerAvatar = ({ name, state, audioLevel = 0 }: InterviewerAvatarProps) => {
+export const InterviewerAvatar = ({
+  name,
+  state,
+  audioLevel = 0,
+  className = 'h-[380px]',
+}: InterviewerAvatarProps) => {
   const isActive = state !== 'idle';
 
   return (
     <div
-      className={`relative h-[380px] overflow-hidden rounded-md border transition-colors duration-300 ${
+      className={`relative overflow-hidden rounded-md border transition-colors duration-300 ${className} ${
         isActive ? 'border-signal/50' : 'border-white/10'
       }`}
     >
@@ -50,7 +56,11 @@ export const InterviewerAvatar = ({ name, state, audioLevel = 0 }: InterviewerAv
 
       {/* Live indicator */}
       <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-canvas/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-graphite backdrop-blur">
-        <Radio size={11} className={isActive ? 'text-red-400' : 'text-graphite'} aria-hidden="true" />
+        <Radio
+          size={11}
+          className={isActive ? 'text-red-400' : 'text-graphite'}
+          aria-hidden="true"
+        />
         Live
       </div>
 

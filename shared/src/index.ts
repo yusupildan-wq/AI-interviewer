@@ -128,7 +128,8 @@ export interface InterviewSession {
   lastActivityAt: string;
 }
 
-export type HireRecommendation = 'strong-hire' | 'hire' | 'lean-hire' | 'no-hire' | 'strong-no-hire';
+export type HireRecommendation =
+  'strong-hire' | 'hire' | 'lean-hire' | 'no-hire' | 'strong-no-hire';
 
 export interface FeedbackReportMoment {
   quote: string;

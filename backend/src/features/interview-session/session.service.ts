@@ -33,6 +33,22 @@ const baselineScores = (): ScoreRubric => ({
   confidence: BASELINE_SCORE,
 });
 
+const openingMessageForMode = (mode: InterviewMode, title: string): string => {
+  if (mode === 'coding') {
+    return `Hi, I am Alex. We will work through ${title} together. Start by clarifying the requirements, then talk through your approach before you code.`;
+  }
+
+  if (mode === 'system-design') {
+    return `Hi, I am Alex. For ${title}, start by clarifying scope and scale before you draw the architecture.`;
+  }
+
+  if (mode === 'behavioral') {
+    return `Hi, I am Alex. I am looking for one specific example with your role, the tradeoffs, and the outcome.`;
+  }
+
+  return `Hi, I am Alex. Pick a project you know deeply. I will ask about the decisions you personally made.`;
+};
+
 const clampScore = (value: number): number => Math.min(MAX_SCORE, Math.max(MIN_SCORE, value));
 
 const countChangedLines = (previous: string | undefined, next: string): number => {
@@ -52,7 +68,10 @@ export const createSession = (mode: InterviewMode, problemId?: string): Intervie
   const problem = problemId ? findProblemById(problemId) : pickRandomProblemForMode(mode);
 
   if (!problem) {
-    throw new HttpError(404, problemId ? `Unknown problem id: ${problemId}` : `No problems available for mode: ${mode}`);
+    throw new HttpError(
+      404,
+      problemId ? `Unknown problem id: ${problemId}` : `No problems available for mode: ${mode}`,
+    );
   }
 
   const now = new Date().toISOString();
@@ -63,10 +82,18 @@ export const createSession = (mode: InterviewMode, problemId?: string): Intervie
     problem,
     persona: interviewerPersona,
     status: 'active',
-    transcript: [],
+    transcript: [
+      {
+        id: randomUUID(),
+        role: 'interviewer',
+        content: openingMessageForMode(mode, problem.title),
+        createdAt: now,
+        interventionType: 'evaluate',
+      },
+    ],
     codeHistory: [],
     scores: baselineScores(),
-    interventionCount: 0,
+    interventionCount: 1,
     startedAt: now,
     lastActivityAt: now,
   };

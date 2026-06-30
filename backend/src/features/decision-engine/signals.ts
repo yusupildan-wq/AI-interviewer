@@ -50,7 +50,9 @@ const containsAnyPhrase = (text: string, phrases: string[]): boolean => {
 const RAPID_EDIT_WINDOW_MS = 60_000;
 
 const countRapidEdits = (codeHistory: CodeSnapshot[], now: number): number =>
-  codeHistory.filter((snapshot) => now - new Date(snapshot.createdAt).getTime() <= RAPID_EDIT_WINDOW_MS).length;
+  codeHistory.filter(
+    (snapshot) => now - new Date(snapshot.createdAt).getTime() <= RAPID_EDIT_WINDOW_MS,
+  ).length;
 
 export interface ComputeCandidateSignalsParams {
   /** session.lastActivityAt captured BEFORE this turn was appended. */

@@ -1,4 +1,13 @@
-import { Activity, ArrowRight, CalendarClock, Code2, FileText, Github, Mic, UserRound } from 'lucide-react';
+import {
+  Activity,
+  ArrowRight,
+  CalendarClock,
+  Code2,
+  FileText,
+  Github,
+  Mic,
+  UserRound,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const upcomingModules = [
@@ -45,7 +54,9 @@ export const DashboardPage = () => (
               <Icon className="text-signal" size={21} aria-hidden="true" />
             </div>
             <p className="mt-4 text-sm leading-6 text-graphite">
-              {module.to ? 'Live now. Click to begin.' : 'Reserved module boundary. Implementation belongs in a future feature slice.'}
+              {module.to
+                ? 'Live now. Click to begin.'
+                : 'Reserved module boundary. Implementation belongs in a future feature slice.'}
             </p>
           </>
         );
@@ -63,7 +74,10 @@ export const DashboardPage = () => (
         }
 
         return (
-          <article key={module.label} className="rounded-md border border-white/10 bg-surface/60 p-5">
+          <article
+            key={module.label}
+            className="rounded-md border border-white/10 bg-surface/60 p-5"
+          >
             {content}
           </article>
         );

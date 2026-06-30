@@ -131,12 +131,23 @@ export const RobotCharacter = ({ state, audioLevel }: RobotCharacterProps) => {
   return (
     <group position={[0, -0.3, 0]}>
       {/* Torso / shoulders — suggests a seated posture in frame, like a webcam headshot */}
-      <RoundedBox ref={torsoRef} args={[1.7, 1.1, 0.9]} radius={0.18} smoothness={4} position={[0, -1.05, -0.05]}>
+      <RoundedBox
+        ref={torsoRef}
+        args={[1.7, 1.1, 0.9]}
+        radius={0.18}
+        smoothness={4}
+        position={[0, -1.05, -0.05]}
+      >
         <meshStandardMaterial color="#15181d" metalness={0.4} roughness={0.5} />
       </RoundedBox>
       <mesh ref={chestLightRef} position={[0, -0.85, 0.42]}>
         <circleGeometry args={[0.06, 32]} />
-        <meshStandardMaterial color="#0a0c0f" emissive="#5b6470" emissiveIntensity={1} toneMapped={false} />
+        <meshStandardMaterial
+          color="#0a0c0f"
+          emissive="#5b6470"
+          emissiveIntensity={1}
+          toneMapped={false}
+        />
       </mesh>
 
       {/* Neck */}
@@ -147,7 +158,12 @@ export const RobotCharacter = ({ state, audioLevel }: RobotCharacterProps) => {
         </mesh>
         <mesh ref={neckRingRef} position={[0, -0.02, 0]}>
           <torusGeometry args={[0.24, 0.022, 12, 32]} />
-          <meshStandardMaterial color="#5b6470" emissive="#5b6470" emissiveIntensity={0.5} toneMapped={false} />
+          <meshStandardMaterial
+            color="#5b6470"
+            emissive="#5b6470"
+            emissiveIntensity={0.5}
+            toneMapped={false}
+          />
         </mesh>
       </group>
 
@@ -158,18 +174,33 @@ export const RobotCharacter = ({ state, audioLevel }: RobotCharacterProps) => {
         </RoundedBox>
 
         {/* Face plate */}
-        <RoundedBox args={[0.82, 0.62, 0.05]} radius={0.1} smoothness={4} position={[0, 0.02, 0.49]}>
+        <RoundedBox
+          args={[0.82, 0.62, 0.05]}
+          radius={0.1}
+          smoothness={4}
+          position={[0, 0.02, 0.49]}
+        >
           <meshStandardMaterial color="#070809" metalness={0.2} roughness={0.6} />
         </RoundedBox>
 
         {/* Eyes (visor style) */}
         <mesh ref={leftEyeRef} position={[-0.21, 0.08, 0.52]}>
           <capsuleGeometry args={[0.05, 0.1, 4, 12]} />
-          <meshStandardMaterial color="#0a0c0f" emissive="#5b6470" emissiveIntensity={1.4} toneMapped={false} />
+          <meshStandardMaterial
+            color="#0a0c0f"
+            emissive="#5b6470"
+            emissiveIntensity={1.4}
+            toneMapped={false}
+          />
         </mesh>
         <mesh ref={rightEyeRef} position={[0.21, 0.08, 0.52]}>
           <capsuleGeometry args={[0.05, 0.1, 4, 12]} />
-          <meshStandardMaterial color="#0a0c0f" emissive="#5b6470" emissiveIntensity={1.4} toneMapped={false} />
+          <meshStandardMaterial
+            color="#0a0c0f"
+            emissive="#5b6470"
+            emissiveIntensity={1.4}
+            toneMapped={false}
+          />
         </mesh>
 
         {/* Mouth grille */}
@@ -182,7 +213,12 @@ export const RobotCharacter = ({ state, audioLevel }: RobotCharacterProps) => {
             position={[x, -0.18, 0.52]}
           >
             <boxGeometry args={[0.035, 0.12, 0.02]} />
-            <meshStandardMaterial color="#0a0c0f" emissive="#2dd4bf" emissiveIntensity={1} toneMapped={false} />
+            <meshStandardMaterial
+              color="#0a0c0f"
+              emissive="#2dd4bf"
+              emissiveIntensity={1}
+              toneMapped={false}
+            />
           </mesh>
         ))}
 
@@ -203,7 +239,12 @@ export const RobotCharacter = ({ state, audioLevel }: RobotCharacterProps) => {
         </mesh>
         <mesh ref={antennaLightRef} position={[0, 0.79, 0]}>
           <sphereGeometry args={[0.045, 16, 16]} />
-          <meshStandardMaterial color="#0a0c0f" emissive="#5b6470" emissiveIntensity={1} toneMapped={false} />
+          <meshStandardMaterial
+            color="#0a0c0f"
+            emissive="#5b6470"
+            emissiveIntensity={1}
+            toneMapped={false}
+          />
         </mesh>
 
         {/* Attentiveness ring — pulses while listening */}

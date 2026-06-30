@@ -9,7 +9,11 @@ export const problems: Problem[] = [
       'Given an array of integers `nums` and an integer `target`, return the indices of the two numbers that add up to `target`. Assume exactly one solution exists, and you may not use the same element twice.',
     difficulty: 'easy',
     category: 'arrays & hashing',
-    constraints: ['2 <= nums.length <= 10^4', '-10^9 <= nums[i] <= 10^9', 'Exactly one valid answer exists.'],
+    constraints: [
+      '2 <= nums.length <= 10^4',
+      '-10^9 <= nums[i] <= 10^9',
+      'Exactly one valid answer exists.',
+    ],
     examples: [
       { input: 'nums = [2,7,11,15], target = 9', output: '[0,1]' },
       { input: 'nums = [3,2,4], target = 6', output: '[1,2]' },
@@ -115,7 +119,11 @@ export type CandidateSafeProblem = Omit<Problem, 'idealApproachNotes' | 'followU
 
 /** Strips interviewer-private fields (the answer key) before a problem reaches the candidate. */
 export const candidateSafeProblem = (problem: Problem): CandidateSafeProblem => {
-  const { idealApproachNotes: _idealApproachNotes, followUpAreas: _followUpAreas, ...rest } = problem;
+  const {
+    idealApproachNotes: _idealApproachNotes,
+    followUpAreas: _followUpAreas,
+    ...rest
+  } = problem;
   return rest;
 };
 

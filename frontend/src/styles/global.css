@@ -44,3 +44,27 @@ a {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+.interview-room {
+  min-height: calc(100vh - 4rem);
+}
+
+.interview-call-grid {
+  display: grid;
+  gap: 0.75rem;
+  height: calc(100vh - 15rem);
+  min-height: 560px;
+}
+
+.interview-call-stage {
+  position: relative;
+  height: 100%;
+  min-height: 560px;
+  overflow: hidden;
+}
+
+@media (min-width: 1280px) {
+  .interview-call-grid {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}

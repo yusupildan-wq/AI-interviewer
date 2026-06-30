@@ -14,7 +14,10 @@ never generic interview advice.`;
 export const buildFeedbackUserPrompt = (session: InterviewSession): string => {
   const transcript = session.transcript
     .map((entry) => {
-      const tag = entry.role === 'interviewer' && entry.interventionType ? `${entry.role}:${entry.interventionType}` : entry.role;
+      const tag =
+        entry.role === 'interviewer' && entry.interventionType
+          ? `${entry.role}:${entry.interventionType}`
+          : entry.role;
       return `[${tag}] ${entry.content}`;
     })
     .join('\n');

@@ -51,68 +51,74 @@ interviewSessionRouter.get('/:id', (request, response) => {
   response.json(toCandidateSession(session));
 });
 
-interviewSessionRouter.post('/:id/turns', asyncHandler(async (request, response) => {
-  const sessionId = requireParam(request.params.id, 'id');
-  const body = request.body as Partial<SubmitTurnRequest>;
-  const message = typeof body.message === 'string' ? body.message : '';
-  const code = typeof body.code === 'string' ? body.code : undefined;
+interviewSessionRouter.post(
+  '/:id/turns',
+  asyncHandler(async (request, response) => {
+    const sessionId = requireParam(request.params.id, 'id');
+    const body = request.body as Partial<SubmitTurnRequest>;
+    const message = typeof body.message === 'string' ? body.message : '';
+    const code = typeof body.code === 'string' ? body.code : undefined;
 
-  if (!message && code === undefined) {
-    throw new HttpError(400, 'Request must include a message and/or code.');
-  }
+    if (!message && code === undefined) {
+      throw new HttpError(400, 'Request must include a message and/or code.');
+    }
 
-  const sessionBeforeTurn = requireActiveSession(sessionId);
-  const previousActivityAt = sessionBeforeTurn.lastActivityAt;
+    const sessionBeforeTurn = requireActiveSession(sessionId);
+    const previousActivityAt = sessionBeforeTurn.lastActivityAt;
 
-  const { session: sessionAfterCandidateTurn, entry, codeSnapshot } = appendCandidateMessage(
-    sessionId,
-    message,
-    code,
-  );
+    const {
+      session: sessionAfterCandidateTurn,
+      entry,
+      codeSnapshot,
+    } = appendCandidateMessage(sessionId, message, code);
 
-  const candidateSignals = computeCandidateSignals({
-    previousActivityAt,
-    codeHistory: sessionAfterCandidateTurn.codeHistory,
-    message,
-    latestCodeSnapshot: codeSnapshot,
-  });
+    const candidateSignals = computeCandidateSignals({
+      previousActivityAt,
+      codeHistory: sessionAfterCandidateTurn.codeHistory,
+      message,
+      latestCodeSnapshot: codeSnapshot,
+    });
 
-  const elapsedMs = Date.now() - new Date(sessionAfterCandidateTurn.startedAt).getTime();
-  const previousInterventions: TranscriptEntry[] = sessionAfterCandidateTurn.transcript.filter(
-    (item) => item.role === 'interviewer',
-  );
+    const elapsedMs = Date.now() - new Date(sessionAfterCandidateTurn.startedAt).getTime();
+    const previousInterventions: TranscriptEntry[] = sessionAfterCandidateTurn.transcript.filter(
+      (item) => item.role === 'interviewer',
+    );
 
-  const decisionInput: DecisionEngineInput = {
-    mode: sessionAfterCandidateTurn.mode,
-    problem: sessionAfterCandidateTurn.problem,
-    persona: sessionAfterCandidateTurn.persona,
-    transcript: sessionAfterCandidateTurn.transcript,
-    currentCandidateMessage: message,
-    currentCode: code,
-    elapsedMs,
-    candidateSignals,
-    previousInterventions,
-  };
+    const decisionInput: DecisionEngineInput = {
+      mode: sessionAfterCandidateTurn.mode,
+      problem: sessionAfterCandidateTurn.problem,
+      persona: sessionAfterCandidateTurn.persona,
+      transcript: sessionAfterCandidateTurn.transcript,
+      currentCandidateMessage: message,
+      currentCode: code,
+      elapsedMs,
+      candidateSignals,
+      previousInterventions,
+    };
 
-  const decision = await runDecisionEngine(decisionInput);
+    const decision = await runDecisionEngine(decisionInput);
 
-  const sessionAfterScoring = applyScoreImpact(sessionId, decision.scoreImpact);
+    const sessionAfterScoring = applyScoreImpact(sessionId, decision.scoreImpact);
 
-  let interventionEntry: TranscriptEntry | undefined;
-  if (decision.shouldIntervene && decision.messageToCandidate) {
-    interventionEntry = appendInterviewerMessage(sessionId, decision.messageToCandidate, decision.interventionType)
-      .entry;
-  }
+    let interventionEntry: TranscriptEntry | undefined;
+    if (decision.shouldIntervene && decision.messageToCandidate) {
+      interventionEntry = appendInterviewerMessage(
+        sessionId,
+        decision.messageToCandidate,
+        decision.interventionType,
+      ).entry;
+    }
 
-  const result: SubmitTurnResponse = {
-    transcriptEntry: entry,
-    interventionEntry,
-    decision,
-    scores: sessionAfterScoring.scores,
-  };
+    const result: SubmitTurnResponse = {
+      transcriptEntry: entry,
+      interventionEntry,
+      decision,
+      scores: sessionAfterScoring.scores,
+    };
 
-  response.json(result);
-}));
+    response.json(result);
+  }),
+);
 
 interviewSessionRouter.post('/:id/end', (request, response) => {
   const session = endSession(requireParam(request.params.id, 'id'));

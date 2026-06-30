@@ -8,7 +8,13 @@ import { computeOverallScore, deriveRecommendationFromScore } from '../scoring/s
 import { feedbackReportJsonSchema } from './feedback.schema.js';
 import { FEEDBACK_SYSTEM_PROMPT, buildFeedbackUserPrompt } from './feedback.prompt.js';
 
-const RECOMMENDATIONS: HireRecommendation[] = ['strong-hire', 'hire', 'lean-hire', 'no-hire', 'strong-no-hire'];
+const RECOMMENDATIONS: HireRecommendation[] = [
+  'strong-hire',
+  'hire',
+  'lean-hire',
+  'no-hire',
+  'strong-no-hire',
+];
 
 interface RawFeedback {
   summary?: unknown;
@@ -34,7 +40,9 @@ const asMoments = (value: unknown): FeedbackReport['notableMoments'] => {
     .filter((moment) => moment.quote.length > 0);
 };
 
-export const generateFeedbackReport = async (session: InterviewSession): Promise<FeedbackReport> => {
+export const generateFeedbackReport = async (
+  session: InterviewSession,
+): Promise<FeedbackReport> => {
   const client = getGroqClient();
   const overallScore = computeOverallScore(session.scores);
 
@@ -59,7 +67,10 @@ export const generateFeedbackReport = async (session: InterviewSession): Promise
     });
   } catch (caught) {
     if (caught instanceof Groq.APIError) {
-      throw new HttpError(502, `Feedback report generation failed (${caught.status}): ${caught.message}`);
+      throw new HttpError(
+        502,
+        `Feedback report generation failed (${caught.status}): ${caught.message}`,
+      );
     }
     throw caught;
   }

@@ -9,11 +9,14 @@ import type {
   TranscribeAudioResponse,
 } from '@ai-interviewer/shared';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:4000';
+const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:4000';
 
 /** The backend strips interviewer-only fields before a problem reaches the client. */
 export type CandidateProblem = Omit<Problem, 'idealApproachNotes' | 'followUpAreas'>;
-export type CandidateInterviewSession = Omit<InterviewSession, 'problem'> & { problem: CandidateProblem };
+export type CandidateInterviewSession = Omit<InterviewSession, 'problem'> & {
+  problem: CandidateProblem;
+};
 
 class ApiError extends Error {
   readonly status: number;
@@ -35,8 +38,12 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => undefined)) as { error?: { message?: string } } | undefined;
-    throw new ApiError(response.status, body?.error?.message ?? `Request failed with status ${response.status}`);
+    const body = (await response.json().catch(() => undefined)) as
+      { error?: { message?: string } } | undefined;
+    throw new ApiError(
+      response.status,
+      body?.error?.message ?? `Request failed with status ${response.status}`,
+    );
   }
 
   return response.json() as Promise<T>;
@@ -51,7 +58,10 @@ export const createInterview = (body: CreateInterviewRequest): Promise<Candidate
 export const getInterview = (sessionId: string): Promise<CandidateInterviewSession> =>
   request(`/interviews/${sessionId}`);
 
-export const submitTurn = (sessionId: string, body: SubmitTurnRequest): Promise<SubmitTurnResponse> =>
+export const submitTurn = (
+  sessionId: string,
+  body: SubmitTurnRequest,
+): Promise<SubmitTurnResponse> =>
   request(`/interviews/${sessionId}/turns`, { method: 'POST', body: JSON.stringify(body) });
 
 export const endInterview = (sessionId: string): Promise<CandidateInterviewSession> =>
@@ -68,8 +78,12 @@ export const transcribeAudio = async (audio: Blob): Promise<TranscribeAudioRespo
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => undefined)) as { error?: { message?: string } } | undefined;
-    throw new ApiError(response.status, body?.error?.message ?? `Transcription failed with status ${response.status}`);
+    const body = (await response.json().catch(() => undefined)) as
+      { error?: { message?: string } } | undefined;
+    throw new ApiError(
+      response.status,
+      body?.error?.message ?? `Transcription failed with status ${response.status}`,
+    );
   }
 
   return response.json() as Promise<TranscribeAudioResponse>;
@@ -83,8 +97,12 @@ export const synthesizeSpeech = async (text: string): Promise<Blob> => {
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => undefined)) as { error?: { message?: string } } | undefined;
-    throw new ApiError(response.status, body?.error?.message ?? `Speech synthesis failed with status ${response.status}`);
+    const body = (await response.json().catch(() => undefined)) as
+      { error?: { message?: string } } | undefined;
+    throw new ApiError(
+      response.status,
+      body?.error?.message ?? `Speech synthesis failed with status ${response.status}`,
+    );
   }
 
   return response.blob();

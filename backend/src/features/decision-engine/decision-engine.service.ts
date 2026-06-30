@@ -1,4 +1,9 @@
-import type { DecisionEngineInput, DecisionEngineOutput, InterventionType, ScoreRubric } from '@ai-interviewer/shared';
+import type {
+  DecisionEngineInput,
+  DecisionEngineOutput,
+  InterventionType,
+  ScoreRubric,
+} from '@ai-interviewer/shared';
 import Groq from 'groq-sdk';
 
 import { env } from '../../config/env.js';
@@ -60,12 +65,17 @@ const parseDecisionOutput = (raw: string): DecisionEngineOutput => {
     shouldIntervene,
     interventionType: shouldIntervene ? interventionType : 'none',
     reason: typeof parsed.reason === 'string' ? parsed.reason : '',
-    messageToCandidate: shouldIntervene && typeof parsed.messageToCandidate === 'string' ? parsed.messageToCandidate : '',
+    messageToCandidate:
+      shouldIntervene && typeof parsed.messageToCandidate === 'string'
+        ? parsed.messageToCandidate
+        : '',
     scoreImpact,
   };
 };
 
-export const runDecisionEngine = async (input: DecisionEngineInput): Promise<DecisionEngineOutput> => {
+export const runDecisionEngine = async (
+  input: DecisionEngineInput,
+): Promise<DecisionEngineOutput> => {
   const client = getGroqClient();
 
   let response;
@@ -80,7 +90,11 @@ export const runDecisionEngine = async (input: DecisionEngineInput): Promise<Dec
       reasoning_effort: env.decisionEngineReasoningEffort as 'low' | 'medium' | 'high',
       response_format: {
         type: 'json_schema',
-        json_schema: { name: 'interviewer_decision', schema: decisionEngineJsonSchema, strict: true },
+        json_schema: {
+          name: 'interviewer_decision',
+          schema: decisionEngineJsonSchema,
+          strict: true,
+        },
       },
       messages: [
         { role: 'system', content: DECISION_ENGINE_SYSTEM_PROMPT },
@@ -89,7 +103,10 @@ export const runDecisionEngine = async (input: DecisionEngineInput): Promise<Dec
     });
   } catch (caught) {
     if (caught instanceof Groq.APIError) {
-      throw new HttpError(502, `Interviewer Decision Engine request failed (${caught.status}): ${caught.message}`);
+      throw new HttpError(
+        502,
+        `Interviewer Decision Engine request failed (${caught.status}): ${caught.message}`,
+      );
     }
     throw caught;
   }

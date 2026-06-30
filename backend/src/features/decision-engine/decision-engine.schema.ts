@@ -5,7 +5,17 @@ export const decisionEngineJsonSchema = {
     shouldIntervene: { type: 'boolean' },
     interventionType: {
       type: 'string',
-      enum: ['clarify', 'pushback', 'hint', 'redirect', 'challenge', 'deepen', 'encourage', 'evaluate', 'none'],
+      enum: [
+        'clarify',
+        'pushback',
+        'hint',
+        'redirect',
+        'challenge',
+        'deepen',
+        'encourage',
+        'evaluate',
+        'none',
+      ],
     },
     reason: { type: 'string' },
     messageToCandidate: { type: 'string' },

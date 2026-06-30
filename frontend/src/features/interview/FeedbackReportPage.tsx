@@ -40,7 +40,9 @@ export const FeedbackReportPage = () => {
       })
       .catch((caught) => {
         if (!cancelled) {
-          setError(caught instanceof ApiError ? caught.message : 'Could not generate the feedback report.');
+          setError(
+            caught instanceof ApiError ? caught.message : 'Could not generate the feedback report.',
+          );
           setIsLoading(false);
         }
       });
@@ -71,10 +73,14 @@ export const FeedbackReportPage = () => {
 
   return (
     <section className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
-      <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Feedback report</p>
+      <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
+        Feedback report
+      </p>
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <h1 className="text-4xl font-bold text-ink">{report.overallScore}/100</h1>
-        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${recommendationStyle[report.recommendation]}`}>
+        <span
+          className={`rounded-full px-3 py-1 text-sm font-semibold ${recommendationStyle[report.recommendation]}`}
+        >
           {recommendationLabel[report.recommendation]}
         </span>
       </div>
@@ -84,7 +90,9 @@ export const FeedbackReportPage = () => {
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_280px]">
         <div className="space-y-6">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Strengths</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
+              Strengths
+            </h2>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-graphite">
               {report.strengths.map((item) => (
                 <li key={item}>{item}</li>
@@ -93,7 +101,9 @@ export const FeedbackReportPage = () => {
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-amberline">Growth areas</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-amberline">
+              Growth areas
+            </h2>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-graphite">
               {report.growthAreas.map((item) => (
                 <li key={item}>{item}</li>
@@ -103,7 +113,9 @@ export const FeedbackReportPage = () => {
 
           {report.notableMoments.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-graphite">Notable moments</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-graphite">
+                Notable moments
+              </h2>
               <div className="mt-3 space-y-3">
                 {report.notableMoments.map((moment) => (
                   <blockquote
