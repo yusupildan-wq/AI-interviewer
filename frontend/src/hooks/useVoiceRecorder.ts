@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const PREFERRED_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
 const SILENCE_THRESHOLD = 0.035;
@@ -119,9 +119,25 @@ export function useVoiceRecorder() {
 
   const start = useCallback(
     async (options: StartOptions = {}) => {
+      // Guard against overlapping sessions: if an auto-listen effect re-fires while a
+      // previous start() is still awaiting mic permission (or a recording is already
+      // active), a second session would silently hijack the shared refs below and
+      // get stopped almost immediately by the first session's silence detector.
+      if (mediaRecorderRef.current) {
+        return;
+      }
+
       setError(undefined);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Another start() call may have won the race while we were awaiting
+        // permission — if so, back off and let that session own the mic.
+        if (mediaRecorderRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
         streamRef.current = stream;
 
         const mimeType = pickSupportedMimeType();
@@ -155,5 +171,7 @@ export function useVoiceRecorder() {
     };
   }, [stopSilenceDetection]);
 
-  return { isRecording, error, start, stop };
+  // Stable identity so consumers can safely depend on the whole object (e.g. in a
+  // useEffect dependency array) without it changing on every unrelated re-render.
+  return useMemo(() => ({ isRecording, error, start, stop }), [isRecording, error, start, stop]);
 }

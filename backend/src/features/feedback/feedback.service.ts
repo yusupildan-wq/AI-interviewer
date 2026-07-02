@@ -50,12 +50,15 @@ export const generateFeedbackReport = async (
   try {
     response = await client.chat.completions.create({
       model: env.decisionEngineModel,
-      // Generous headroom: reasoning tokens count against this budget before the JSON
-      // answer is emitted, and a too-tight limit causes the model to run out of room
-      // and return an empty/invalid completion (Groq error code json_validate_failed).
+      // Reasoning tokens count against this budget before the JSON answer is emitted, and
+      // a too-tight limit causes the model to run out of room and return an empty/invalid
+      // completion (Groq error code json_validate_failed). Kept well under the account's
+      // 8000 TPM cap alongside the full-transcript prompt this call sends — see
+      // reasoning_effort below, which is the main lever for keeping reasoning-token usage
+      // predictable ("high" reliably blows the TPM budget on a prompt this size).
       max_completion_tokens: 4096,
       temperature: 0.4,
-      reasoning_effort: 'high',
+      reasoning_effort: 'medium',
       response_format: {
         type: 'json_schema',
         json_schema: { name: 'feedback_report', schema: feedbackReportJsonSchema, strict: true },

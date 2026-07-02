@@ -1,9 +1,15 @@
-import type { InterviewMode } from '@ai-interviewer/shared';
-import { Briefcase, Code2, MessageSquareText, Network } from 'lucide-react';
+import type { InterviewMode, InterviewerStrictness, UserProfile } from '@ai-interviewer/shared';
+import { Briefcase, Code2, Coffee, Flame, Gauge, MessageSquareText, Network } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { ApiError, createInterview, listProblems, type CandidateProblem } from '../../lib/api';
+import {
+  ApiError,
+  createInterview,
+  getProfile,
+  listProblems,
+  type CandidateProblem,
+} from '../../lib/api';
 
 const MODES: { value: InterviewMode; label: string; description: string; icon: typeof Code2 }[] = [
   {
@@ -32,13 +38,68 @@ const MODES: { value: InterviewMode; label: string; description: string; icon: t
   },
 ];
 
+const STRICTNESS_LEVELS: {
+  value: InterviewerStrictness;
+  label: string;
+  description: string;
+  icon: typeof Coffee;
+}[] = [
+  {
+    value: 'coffee-chat',
+    label: 'Coffee Chat',
+    description:
+      'Relaxed and conversational. Tangents are fine — gently steered back, never cut off.',
+    icon: Coffee,
+  },
+  {
+    value: 'standard',
+    label: 'Standard',
+    description:
+      'A real, balanced interview. Probes when it matters, lets you think the rest of the time.',
+    icon: Gauge,
+  },
+  {
+    value: 'strict',
+    label: 'Strict',
+    description: 'High-pressure bar-raiser. Fast redirects, hard pushback, no hand-waving allowed.',
+    icon: Flame,
+  },
+];
+
+const recommendedModeFor = (profile: UserProfile): InterviewMode => {
+  if (profile.weakAreas.some((area) => /system|scale|design/i.test(area))) return 'system-design';
+  if (profile.weakAreas.some((area) => /behavior|story|leadership|communication/i.test(area))) {
+    return 'behavioral';
+  }
+  if (profile.weakAreas.some((area) => /resume|project|github/i.test(area))) {
+    return 'resume-deep-dive';
+  }
+  return 'coding';
+};
+
 export const NewInterviewPage = () => {
   const navigate = useNavigate();
   const [mode, setMode] = useState<InterviewMode>('coding');
+  const [strictness, setStrictness] = useState<InterviewerStrictness>('standard');
+  const [profile, setProfile] = useState<UserProfile>();
   const [problems, setProblems] = useState<CandidateProblem[]>([]);
   const [problemId, setProblemId] = useState<string>('');
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | undefined>();
+
+  useEffect(() => {
+    let cancelled = false;
+    getProfile()
+      .then((loaded) => {
+        if (cancelled) return;
+        setProfile(loaded);
+        setMode(recommendedModeFor(loaded));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,7 +124,11 @@ export const NewInterviewPage = () => {
     setIsStarting(true);
     setError(undefined);
     try {
-      const session = await createInterview({ mode, problemId: problemId || undefined });
+      const session = await createInterview({
+        mode,
+        strictness,
+        problemId: problemId || undefined,
+      });
       navigate(`/interview/${session.id}`);
     } catch (caught) {
       setError(
@@ -81,6 +146,16 @@ export const NewInterviewPage = () => {
         Alex Chen, your interviewer, will run the session like a real FAANG loop: mostly listening,
         speaking only when it matters.
       </p>
+
+      {profile && (
+        <div className="mt-6 rounded-md border border-white/10 bg-surface p-4 text-sm text-graphite">
+          <span className="font-semibold text-ink">Calibrated for:</span>{' '}
+          {profile.seniority.replace('-', ' ')} {profile.targetRole.replace('-', ' ')} using{' '}
+          {profile.preferredLanguage}
+          {profile.targetCompanies.length > 0 &&
+            `, targeting ${profile.targetCompanies.join(', ')}`}
+        </div>
+      )}
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         {MODES.map((option) => {
@@ -111,6 +186,48 @@ export const NewInterviewPage = () => {
             </button>
           );
         })}
+      </div>
+
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
+          Interview style
+        </h2>
+        <p className="mt-1 text-sm text-graphite">
+          How much pressure Alex applies. Every level still redirects you if you wander off-topic —
+          Coffee Chat just gives you a lot more room before that happens.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {STRICTNESS_LEVELS.map((level) => {
+            const Icon = level.icon;
+            const isSelected = strictness === level.value;
+            return (
+              <button
+                key={level.value}
+                type="button"
+                onClick={() => setStrictness(level.value)}
+                className={[
+                  'rounded-md border p-4 text-left transition',
+                  isSelected
+                    ? 'border-signal bg-surface shadow-glow'
+                    : 'border-white/10 bg-surface/60 hover:border-white/20',
+                ].join(' ')}
+              >
+                <div className="flex items-center justify-between">
+                  <Icon
+                    className={isSelected ? 'text-signal' : 'text-graphite'}
+                    size={20}
+                    aria-hidden="true"
+                  />
+                  {isSelected && (
+                    <span className="text-xs font-semibold text-signal">Selected</span>
+                  )}
+                </div>
+                <h3 className="mt-3 font-semibold text-ink">{level.label}</h3>
+                <p className="mt-1.5 text-sm leading-6 text-graphite">{level.description}</p>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {problems.length > 0 && (

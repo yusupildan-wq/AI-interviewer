@@ -1,4 +1,9 @@
-import type { InterviewMode, ScoreRubric, TranscriptEntry } from '@ai-interviewer/shared';
+import type {
+  InterviewMode,
+  InterviewerStrictness,
+  ScoreRubric,
+  TranscriptEntry,
+} from '@ai-interviewer/shared';
 import Editor from '@monaco-editor/react';
 import {
   Activity,
@@ -40,6 +45,12 @@ const MODE_LABEL: Record<InterviewMode, string> = {
   coding: 'Live coding',
   'system-design': 'System design',
   'resume-deep-dive': 'Resume deep dive',
+};
+
+const STRICTNESS_LABEL: Record<InterviewerStrictness, string> = {
+  'coffee-chat': 'Coffee chat',
+  standard: 'Standard',
+  strict: 'Strict',
 };
 
 type SidePanel = 'problem' | 'code' | 'transcript' | 'score';
@@ -324,6 +335,9 @@ export const InterviewRoomPage = () => {
             </span>
             <span className="rounded-full bg-slatewash px-2.5 py-1 text-[11px] font-semibold text-graphite">
               {MODE_LABEL[session.mode]}
+            </span>
+            <span className="rounded-full bg-amberline/10 px-2.5 py-1 text-[11px] font-semibold text-amberline">
+              {STRICTNESS_LABEL[session.strictness]}
             </span>
             <span className="rounded-full bg-slatewash px-2.5 py-1 text-[11px] font-semibold text-graphite">
               {currentStage}

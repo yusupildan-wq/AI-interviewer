@@ -1,12 +1,18 @@
 import type {
+  AuthResponse,
   CreateInterviewRequest,
   FeedbackReport,
   InterviewMode,
   InterviewSession,
+  InterviewSessionSummary,
+  LoginRequest,
   Problem,
+  SignupRequest,
   SubmitTurnRequest,
   SubmitTurnResponse,
   TranscribeAudioResponse,
+  UpdateUserProfileRequest,
+  UserProfile,
 } from '@ai-interviewer/shared';
 
 const API_BASE_URL =
@@ -28,9 +34,16 @@ class ApiError extends Error {
   }
 }
 
+const parseErrorBody = async (response: Response): Promise<string | undefined> => {
+  const body = (await response.json().catch(() => undefined)) as
+    { error?: { message?: string } } | undefined;
+  return body?.error?.message;
+};
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...init?.headers,
@@ -38,19 +51,52 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => undefined)) as
-      { error?: { message?: string } } | undefined;
-    throw new ApiError(
-      response.status,
-      body?.error?.message ?? `Request failed with status ${response.status}`,
-    );
+    const message = await parseErrorBody(response);
+    throw new ApiError(response.status, message ?? `Request failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
 };
 
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export const signup = (body: SignupRequest): Promise<AuthResponse> =>
+  request('/auth/signup', { method: 'POST', body: JSON.stringify(body) });
+
+export const login = (body: LoginRequest): Promise<AuthResponse> =>
+  request('/auth/login', { method: 'POST', body: JSON.stringify(body) });
+
+export const logout = (): Promise<void> => request('/auth/logout', { method: 'POST' });
+
+export const getCurrentUser = (): Promise<AuthResponse> => request('/auth/me');
+
+/** Local-only convenience: signs in as a fixed seeded dev account. The backend refuses this in production. */
+export const devLogin = (): Promise<AuthResponse> => request('/auth/dev-login', { method: 'POST' });
+
+// ---------------------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------------------
+
+export const getProfile = (): Promise<UserProfile> => request('/profile');
+
+export const updateProfile = (body: UpdateUserProfileRequest): Promise<UserProfile> =>
+  request('/profile', { method: 'PUT', body: JSON.stringify(body) });
+
+// ---------------------------------------------------------------------------
+// Interviews
+// ---------------------------------------------------------------------------
+
 export const listProblems = (mode?: InterviewMode): Promise<CandidateProblem[]> =>
   request(`/problems${mode ? `?mode=${mode}` : ''}`);
+
+export const listInterviewHistory = (): Promise<InterviewSessionSummary[]> =>
+  request('/interviews');
 
 export const createInterview = (body: CreateInterviewRequest): Promise<CandidateInterviewSession> =>
   request('/interviews', { method: 'POST', body: JSON.stringify(body) });
@@ -73,16 +119,16 @@ export const getFeedbackReport = (sessionId: string): Promise<FeedbackReport> =>
 export const transcribeAudio = async (audio: Blob): Promise<TranscribeAudioResponse> => {
   const response = await fetch(`${API_BASE_URL}/voice/transcribe`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': audio.type || 'audio/webm' },
     body: audio,
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => undefined)) as
-      { error?: { message?: string } } | undefined;
+    const message = await parseErrorBody(response);
     throw new ApiError(
       response.status,
-      body?.error?.message ?? `Transcription failed with status ${response.status}`,
+      message ?? `Transcription failed with status ${response.status}`,
     );
   }
 
@@ -92,16 +138,16 @@ export const transcribeAudio = async (audio: Blob): Promise<TranscribeAudioRespo
 export const synthesizeSpeech = async (text: string): Promise<Blob> => {
   const response = await fetch(`${API_BASE_URL}/voice/speak`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => undefined)) as
-      { error?: { message?: string } } | undefined;
+    const message = await parseErrorBody(response);
     throw new ApiError(
       response.status,
-      body?.error?.message ?? `Speech synthesis failed with status ${response.status}`,
+      message ?? `Speech synthesis failed with status ${response.status}`,
     );
   }
 

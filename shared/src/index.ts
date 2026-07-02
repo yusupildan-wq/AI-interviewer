@@ -13,6 +13,13 @@ export const APP_NAME = 'AI Interviewer';
 
 export type InterviewMode = 'behavioral' | 'coding' | 'system-design' | 'resume-deep-dive';
 
+/**
+ * How hard the interviewer pushes — independent of interview mode. Mode is "what
+ * kind of interview"; strictness is "how much pressure". Coffee Chat still redirects
+ * a candidate who wanders off-topic, just later and much more gently than Strict.
+ */
+export type InterviewerStrictness = 'coffee-chat' | 'standard' | 'strict';
+
 export type InterventionType =
   | 'clarify'
   | 'pushback'
@@ -93,6 +100,7 @@ export interface InterviewerPersona {
  */
 export interface DecisionEngineInput {
   mode: InterviewMode;
+  strictness: InterviewerStrictness;
   problem: Problem;
   persona: InterviewerPersona;
   transcript: TranscriptEntry[];
@@ -115,7 +123,9 @@ export type InterviewStatus = 'active' | 'completed';
 
 export interface InterviewSession {
   id: string;
+  userId: string;
   mode: InterviewMode;
+  strictness: InterviewerStrictness;
   problem: Problem;
   persona: InterviewerPersona;
   status: InterviewStatus;
@@ -149,11 +159,71 @@ export interface FeedbackReport {
 }
 
 // ---------------------------------------------------------------------------
+// Auth domain
+// ---------------------------------------------------------------------------
+
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  createdAt: string;
+}
+
+export interface SignupRequest {
+  email: string;
+  password: string;
+  name?: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  user: User;
+}
+
+// ---------------------------------------------------------------------------
+// Profile domain
+// ---------------------------------------------------------------------------
+
+export type TargetRole =
+  'frontend' | 'backend' | 'full-stack' | 'mobile' | 'ml-ai' | 'data' | 'devops' | 'security';
+
+export type SeniorityLevel = 'intern' | 'new-grad' | 'mid-level' | 'senior' | 'staff';
+
+export type CodingLanguage =
+  'javascript' | 'typescript' | 'python' | 'java' | 'csharp' | 'cpp' | 'go' | 'rust';
+
+export interface UserProfile {
+  userId: string;
+  targetRole: TargetRole;
+  seniority: SeniorityLevel;
+  preferredLanguage: CodingLanguage;
+  targetCompanies: string[];
+  weakAreas: string[];
+  interviewGoal: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateUserProfileRequest {
+  targetRole?: TargetRole;
+  seniority?: SeniorityLevel;
+  preferredLanguage?: CodingLanguage;
+  targetCompanies?: string[];
+  weakAreas?: string[];
+  interviewGoal?: string;
+}
+
+// ---------------------------------------------------------------------------
 // API request/response contracts
 // ---------------------------------------------------------------------------
 
 export interface CreateInterviewRequest {
   mode: InterviewMode;
+  strictness?: InterviewerStrictness;
   problemId?: string;
 }
 
@@ -175,4 +245,16 @@ export interface TranscribeAudioResponse {
 
 export interface SynthesizeSpeechRequest {
   text: string;
+}
+
+/** Lightweight row for interview history lists — avoids shipping full transcripts. */
+export interface InterviewSessionSummary {
+  id: string;
+  mode: InterviewMode;
+  strictness: InterviewerStrictness;
+  problemTitle: string;
+  status: InterviewStatus;
+  scores: ScoreRubric;
+  startedAt: string;
+  endedAt?: string;
 }

@@ -5,9 +5,12 @@ import type {
   InterventionType,
   InterviewMode,
   InterviewSession,
+  InterviewSessionSummary,
   InterviewerPersona,
+  InterviewerStrictness,
   ScoreRubric,
   TranscriptEntry,
+  UserProfile,
 } from '@ai-interviewer/shared';
 
 import { HttpError } from '../../shared/http-error.js';
@@ -18,13 +21,23 @@ const BASELINE_SCORE = 50;
 const MIN_SCORE = 0;
 const MAX_SCORE = 100;
 
-export const interviewerPersona: InterviewerPersona = {
-  name: 'Alex Chen',
-  styleSummary:
-    'Senior staff-level FAANG interviewer. Calm, precise, and economical with words. Lets candidates think in silence, ' +
-    'intervenes only when it is pedagogically or evaluatively useful, and always grounds follow-ups in something the ' +
-    'candidate just said or did.',
+const PERSONA_STYLE_SUMMARY: Record<InterviewerStrictness, string> = {
+  'coffee-chat':
+    'Warm, curious conversation partner running a relaxed coffee chat. Genuinely interested in your story, low ' +
+    'pressure, laughs easily — but still gently steers things back if the conversation drifts too far off track.',
+  standard:
+    'Senior staff-level FAANG interviewer. Calm, precise, and economical with words. Lets candidates think in ' +
+    'silence, intervenes only when it is pedagogically or evaluatively useful, and always grounds follow-ups in ' +
+    'something the candidate just said or did.',
+  strict:
+    'Rigorous FAANG bar-raiser. Direct, exacting, and unsparing with vague or unjustified answers. Expects ' +
+    'precision, presses hard on weak reasoning, and redirects off-topic answers immediately.',
 };
+
+export const interviewerPersonaFor = (strictness: InterviewerStrictness): InterviewerPersona => ({
+  name: 'Alex Chen',
+  styleSummary: PERSONA_STYLE_SUMMARY[strictness],
+});
 
 const baselineScores = (): ScoreRubric => ({
   communication: BASELINE_SCORE,
@@ -33,20 +46,65 @@ const baselineScores = (): ScoreRubric => ({
   confidence: BASELINE_SCORE,
 });
 
-const openingMessageForMode = (mode: InterviewMode, title: string): string => {
+const openingMessageForMode = (
+  mode: InterviewMode,
+  title: string,
+  strictness: InterviewerStrictness,
+  profile?: UserProfile,
+): string => {
+  const targetContext = profile
+    ? ` I will calibrate this for a ${profile.seniority} ${profile.targetRole} interview${
+        profile.targetCompanies.length > 0
+          ? ` with ${profile.targetCompanies.slice(0, 2).join(' / ')} expectations in mind`
+          : ''
+      }.`
+    : '';
+  const goalContext =
+    profile?.interviewGoal &&
+    profile.interviewGoal !== 'Prepare for realistic technical interviews.'
+      ? ` Your goal is: ${profile.interviewGoal}`
+      : '';
+  const context = `${targetContext}${goalContext}`;
+
+  if (strictness === 'coffee-chat') {
+    if (mode === 'coding') {
+      return `Hey, I'm Alex! Nothing formal here — let's just talk through ${title} together like we're figuring it out over coffee. Walk me through how you'd think about it.`;
+    }
+    if (mode === 'system-design') {
+      return `Hey, I'm Alex. Let's chat through ${title} casually — no whiteboard pressure, just talk me through how you'd approach it.`;
+    }
+    if (mode === 'behavioral') {
+      return `Hey, I'm Alex! This is just a chat — tell me about something you worked on that stuck with you.`;
+    }
+    return `Hey, I'm Alex. Pick a project you're proud of and just tell me about it — I'll jump in with questions as we go.`;
+  }
+
+  if (strictness === 'strict') {
+    if (mode === 'coding') {
+      return `I'm Alex. We're solving ${title}.${context} Clarify the requirements, state your approach and its complexity, then implement it. I will push on every assumption.`;
+    }
+    if (mode === 'system-design') {
+      return `I'm Alex. Design ${title}. Start with scale and constraints — I expect numbers, not guesses.`;
+    }
+    if (mode === 'behavioral') {
+      return `I'm Alex. Give me one specific example: your role, the tradeoffs you weighed, and the measurable outcome. Generalities will not hold up.`;
+    }
+    return `I'm Alex. Pick the project you know most deeply. I will go line by line into the decisions you personally made.`;
+  }
+
   if (mode === 'coding') {
-    return `Hi, I am Alex. We will work through ${title} together. Start by clarifying the requirements, then talk through your approach before you code.`;
+    return `Hi, I am Alex. We will work through ${title} together.${context} Start by clarifying the requirements, then talk through your approach before you code.`;
   }
 
   if (mode === 'system-design') {
-    return `Hi, I am Alex. For ${title}, start by clarifying scope and scale before you draw the architecture.`;
+    return `Hi, I am Alex. For ${title}, start by clarifying scope and scale before you draw the architecture.${context}`;
   }
 
   if (mode === 'behavioral') {
-    return `Hi, I am Alex. I am looking for one specific example with your role, the tradeoffs, and the outcome.`;
+    return `Hi, I am Alex.${context} I am looking for one specific example with your role, the tradeoffs, and the outcome.`;
   }
 
-  return `Hi, I am Alex. Pick a project you know deeply. I will ask about the decisions you personally made.`;
+  return `Hi, I am Alex.${context} Pick a project you know deeply. I will ask about the decisions you personally made.`;
 };
 
 const clampScore = (value: number): number => Math.min(MAX_SCORE, Math.max(MIN_SCORE, value));
@@ -64,7 +122,13 @@ const countChangedLines = (previous: string | undefined, next: string): number =
   return changed;
 };
 
-export const createSession = (mode: InterviewMode, problemId?: string): InterviewSession => {
+export const createSession = async (
+  userId: string,
+  mode: InterviewMode,
+  problemId?: string,
+  strictness: InterviewerStrictness = 'standard',
+  profile?: UserProfile,
+): Promise<InterviewSession> => {
   const problem = problemId ? findProblemById(problemId) : pickRandomProblemForMode(mode);
 
   if (!problem) {
@@ -78,15 +142,17 @@ export const createSession = (mode: InterviewMode, problemId?: string): Intervie
 
   const session: InterviewSession = {
     id: randomUUID(),
+    userId,
     mode,
+    strictness,
     problem,
-    persona: interviewerPersona,
+    persona: interviewerPersonaFor(strictness),
     status: 'active',
     transcript: [
       {
         id: randomUUID(),
         role: 'interviewer',
-        content: openingMessageForMode(mode, problem.title),
+        content: openingMessageForMode(mode, problem.title, strictness, profile),
         createdAt: now,
         interventionType: 'evaluate',
       },
@@ -101,28 +167,31 @@ export const createSession = (mode: InterviewMode, problemId?: string): Intervie
   return sessionRepository.create(session);
 };
 
-export const getSession = (sessionId: string): InterviewSession => {
-  const session = sessionRepository.findById(sessionId);
+export const getSession = async (sessionId: string): Promise<InterviewSession> => {
+  const session = await sessionRepository.findById(sessionId);
   if (!session) {
     throw new HttpError(404, `Interview session not found: ${sessionId}`);
   }
   return session;
 };
 
-export const requireActiveSession = (sessionId: string): InterviewSession => {
-  const session = getSession(sessionId);
+export const requireActiveSession = async (sessionId: string): Promise<InterviewSession> => {
+  const session = await getSession(sessionId);
   if (session.status !== 'active') {
     throw new HttpError(409, `Interview session is already completed: ${sessionId}`);
   }
   return session;
 };
 
-export const appendCandidateMessage = (
+export const listSessionsForUser = (userId: string): Promise<InterviewSessionSummary[]> =>
+  sessionRepository.listByUser(userId);
+
+export const appendCandidateMessage = async (
   sessionId: string,
   message: string,
   code: string | undefined,
-): { session: InterviewSession; entry: TranscriptEntry; codeSnapshot?: CodeSnapshot } => {
-  const session = requireActiveSession(sessionId);
+): Promise<{ session: InterviewSession; entry: TranscriptEntry; codeSnapshot?: CodeSnapshot }> => {
+  const session = await requireActiveSession(sessionId);
   const now = new Date().toISOString();
 
   const entry: TranscriptEntry = {
@@ -147,17 +216,17 @@ export const appendCandidateMessage = (
   }
 
   session.lastActivityAt = now;
-  sessionRepository.save(session);
+  await sessionRepository.save(session);
 
   return { session, entry, codeSnapshot };
 };
 
-export const appendInterviewerMessage = (
+export const appendInterviewerMessage = async (
   sessionId: string,
   content: string,
   interventionType: InterventionType,
-): { session: InterviewSession; entry: TranscriptEntry } => {
-  const session = requireActiveSession(sessionId);
+): Promise<{ session: InterviewSession; entry: TranscriptEntry }> => {
+  const session = await requireActiveSession(sessionId);
   const now = new Date().toISOString();
 
   const entry: TranscriptEntry = {
@@ -170,13 +239,16 @@ export const appendInterviewerMessage = (
   session.transcript.push(entry);
   session.interventionCount += 1;
   session.lastActivityAt = now;
-  sessionRepository.save(session);
+  await sessionRepository.save(session);
 
   return { session, entry };
 };
 
-export const applyScoreImpact = (sessionId: string, impact: ScoreRubric): InterviewSession => {
-  const session = getSession(sessionId);
+export const applyScoreImpact = async (
+  sessionId: string,
+  impact: ScoreRubric,
+): Promise<InterviewSession> => {
+  const session = await getSession(sessionId);
   session.scores = {
     communication: clampScore(session.scores.communication + impact.communication),
     problemSolving: clampScore(session.scores.problemSolving + impact.problemSolving),
@@ -186,8 +258,8 @@ export const applyScoreImpact = (sessionId: string, impact: ScoreRubric): Interv
   return sessionRepository.save(session);
 };
 
-export const endSession = (sessionId: string): InterviewSession => {
-  const session = requireActiveSession(sessionId);
+export const endSession = async (sessionId: string): Promise<InterviewSession> => {
+  const session = await requireActiveSession(sessionId);
   session.status = 'completed';
   session.endedAt = new Date().toISOString();
   return sessionRepository.save(session);

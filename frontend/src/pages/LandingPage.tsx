@@ -1,8 +1,6 @@
 import { ArrowRight, CheckCircle2, LineChart, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import heroImage from '../assets/interview-hero.png';
-
 const pillars = [
   {
     title: 'Realistic practice',
@@ -25,15 +23,36 @@ const pillars = [
 
 export const LandingPage = () => (
   <>
-    <section className="relative min-h-[calc(100vh-4rem)] overflow-hidden">
-      <img
-        src={heroImage}
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover opacity-40"
+    <section className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-canvas">
+      {/* Ambient gradient glow */}
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        <div className="absolute -top-48 right-[-8%] h-[620px] w-[620px] rounded-full bg-signal/25 blur-[150px]" />
+        <div className="absolute bottom-[-25%] left-[-12%] h-[520px] w-[520px] rounded-full bg-amberline/15 blur-[150px]" />
+      </div>
+
+      {/* Faint grid texture, fading toward the edges */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.08]"
+        style={{
+          backgroundImage:
+            'linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
+          maskImage: 'radial-gradient(ellipse 70% 60% at 35% 35%, black 0%, transparent 75%)',
+          WebkitMaskImage: 'radial-gradient(ellipse 70% 60% at 35% 35%, black 0%, transparent 75%)',
+        }}
         aria-hidden="true"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-canvas via-canvas/92 to-canvas/40" />
-      <div className="absolute inset-0 bg-gradient-to-t from-canvas via-transparent to-transparent" />
+
+      {/* Orbit rings, echoing the interviewer avatar's attentiveness ring */}
+      <div
+        className="pointer-events-none absolute right-[6%] top-1/2 hidden h-[520px] w-[520px] -translate-y-1/2 lg:block"
+        aria-hidden="true"
+      >
+        <div className="absolute inset-0 rounded-full border border-signal/20" />
+        <div className="absolute inset-[13%] rounded-full border border-signal/10" />
+        <div className="absolute inset-[30%] rounded-full border border-amberline/15" />
+        <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-signal shadow-glow" />
+      </div>
 
       <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] max-w-7xl items-center px-4 pb-24 pt-16 sm:px-6 lg:px-8">
         <div className="max-w-2xl">

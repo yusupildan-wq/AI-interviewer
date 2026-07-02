@@ -7,7 +7,8 @@ The root `.env.example` documents the complete local environment. App-specific e
 - `VITE_API_BASE_URL`: Browser-facing backend origin used by the frontend.
 - `PORT`: Backend HTTP port.
 - `CORS_ORIGIN`: Allowed frontend origin for local development.
-- `DATABASE_URL`: PostgreSQL connection string reserved for the future data layer.
+- `DATABASE_URL`: PostgreSQL connection string. Required — users, interview sessions, and feedback reports are persisted here via Drizzle ORM. Run `npm run db:migrate -w backend` after pointing this at a fresh database.
+- `SESSION_SECRET`: Signs and encrypts the auth session cookie (`cookie-parser`'s signed-cookie secret). Falls back to an insecure dev-only value outside production; the backend refuses to start in production without it. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 - `GROQ_API_KEY`: Required for the Interviewer Decision Engine and feedback report generation. Groq has a free tier: https://console.groq.com/keys.
 - `DECISION_ENGINE_MODEL`: Groq model used for interviewer decisions and feedback generation. Defaults to `openai/gpt-oss-120b`.
 - `DECISION_ENGINE_REASONING_EFFORT`: Reasoning depth passed to the model (`low` | `medium` | `high`). Defaults to `high`.

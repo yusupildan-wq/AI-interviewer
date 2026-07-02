@@ -10,7 +10,7 @@ import { env } from '../../config/env.js';
 import { HttpError } from '../../shared/http-error.js';
 import { getGroqClient } from '../llm/groq-client.js';
 import { decisionEngineJsonSchema } from './decision-engine.schema.js';
-import { DECISION_ENGINE_SYSTEM_PROMPT, buildDecisionEngineUserPrompt } from './prompt.js';
+import { buildDecisionEngineSystemPrompt, buildDecisionEngineUserPrompt } from './prompt.js';
 
 const INTERVENTION_TYPES: InterventionType[] = [
   'clarify',
@@ -82,11 +82,15 @@ export const runDecisionEngine = async (
   try {
     response = await client.chat.completions.create({
       model: env.decisionEngineModel,
-      // Generous headroom: reasoning tokens count against this budget before the JSON
-      // answer is emitted, and a too-tight limit causes the model to run out of room
-      // and return an empty/invalid completion (Groq error code json_validate_failed).
-      max_completion_tokens: 2048,
-      temperature: 0.4,
+      // Reasoning tokens count against this budget before the JSON answer is emitted, and
+      // a too-tight limit causes the model to run out of room and return an empty/invalid
+      // completion (Groq error code json_validate_failed). Kept well under the account's
+      // 8000 TPM cap alongside the ~3-4k token system+user prompt — see reasoning_effort
+      // below, which is the main lever for keeping reasoning-token usage predictable.
+      max_completion_tokens: 4096,
+      // Higher than a typical extraction task on purpose: the whole point is to sound
+      // like a real person, not the same templated phrasing every turn.
+      temperature: 0.7,
       reasoning_effort: env.decisionEngineReasoningEffort as 'low' | 'medium' | 'high',
       response_format: {
         type: 'json_schema',
@@ -97,7 +101,7 @@ export const runDecisionEngine = async (
         },
       },
       messages: [
-        { role: 'system', content: DECISION_ENGINE_SYSTEM_PROMPT },
+        { role: 'system', content: buildDecisionEngineSystemPrompt(input.strictness) },
         { role: 'user', content: buildDecisionEngineUserPrompt(input) },
       ],
     });
