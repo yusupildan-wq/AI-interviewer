@@ -22,6 +22,18 @@ const recommendationLabel: Record<FeedbackReport['recommendation'], string> = {
   'strong-no-hire': 'Strong no hire',
 };
 
+const coverageStyle: Record<FeedbackReport['coaching']['coverage'][number]['status'], string> = {
+  covered: 'border-signal/40 bg-signal/10 text-signal',
+  partial: 'border-amberline/40 bg-amberline/10 text-amberline',
+  missed: 'border-red-500/40 bg-red-500/10 text-red-300',
+};
+
+const coverageLabel: Record<FeedbackReport['coaching']['coverage'][number]['status'], string> = {
+  covered: 'Covered',
+  partial: 'Partial',
+  missed: 'Missed',
+};
+
 export const FeedbackReportPage = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [report, setReport] = useState<FeedbackReport | undefined>();
@@ -72,7 +84,7 @@ export const FeedbackReportPage = () => {
   }
 
   return (
-    <section className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+    <section className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
       <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
         Feedback report
       </p>
@@ -86,6 +98,84 @@ export const FeedbackReportPage = () => {
       </div>
 
       <p className="mt-6 max-w-3xl leading-7 text-graphite">{report.summary}</p>
+
+      <div className="mt-8 rounded-md border border-line bg-surface/70 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
+              Coaching intelligence
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-graphite">
+              Stage reached:{' '}
+              <span className="font-semibold text-ink">{report.coaching.stageReached}</span>. Focus:{' '}
+              {report.coaching.primaryFocus}
+            </p>
+          </div>
+          <p className="max-w-sm text-sm leading-6 text-graphite">{report.coaching.nextProbe}</p>
+        </div>
+
+        {report.coaching.coverage.length > 0 && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {report.coaching.coverage.map((item) => (
+              <div key={item.key} className="rounded-md border border-line bg-canvas/50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-ink">{item.label}</h3>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${coverageStyle[item.status]}`}
+                  >
+                    {coverageLabel[item.status]}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-graphite">{item.note}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-5">
+          <h3 className="text-sm font-semibold text-ink">Next drills</h3>
+          <ul className="mt-3 grid gap-2 text-sm leading-6 text-graphite md:grid-cols-2">
+            {report.coaching.nextDrills.map((drill) => (
+              <li key={drill} className="rounded-md border border-line bg-canvas/40 px-3 py-2">
+                {drill}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {report.coaching.evidence.length > 0 && (
+          <div className="mt-5">
+            <h3 className="text-sm font-semibold text-ink">Evidence trail</h3>
+            <div className="mt-3 space-y-2">
+              {report.coaching.evidence.map((item) => (
+                <div key={item.id} className="rounded-md border border-line bg-canvas/40 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-slatewash px-2 py-0.5 text-xs font-semibold text-graphite">
+                      {item.type.replaceAll('-', ' ')}
+                    </span>
+                    <span
+                      className={[
+                        'rounded-full px-2 py-0.5 text-xs font-semibold',
+                        item.severity === 'positive'
+                          ? 'bg-signal/15 text-signal'
+                          : item.severity === 'critical'
+                            ? 'bg-red-500/15 text-red-300'
+                            : 'bg-amberline/15 text-amberline',
+                      ].join(' ')}
+                    >
+                      {item.severity}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm italic leading-6 text-ink">
+                    &ldquo;{item.transcriptQuote}&rdquo;
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-graphite">{item.coachingNote}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_280px]">
         <div className="space-y-6">

@@ -15,6 +15,27 @@
       "when": 1783004442830,
       "tag": "0001_square_joystick",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783005364343,
+      "tag": "0002_aspiring_hitman",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783005977321,
+      "tag": "0003_wet_hawkeye",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783007921122,
+      "tag": "0004_busy_turbo",
+      "breakpoints": true
     }
   ]
 }

@@ -1,28 +1,23 @@
-import type { InterviewMode, InterviewSessionSummary, UserProfile } from '@ai-interviewer/shared';
+import type {
+  InterviewMode,
+  InterviewSessionSummary,
+  ProgressOverview,
+  UserProfile,
+} from '@ai-interviewer/shared';
 import {
-  Activity,
   ArrowRight,
+  BarChart3,
   CalendarClock,
-  Code2,
-  FileText,
-  Github,
+  CircleAlert,
   Loader2,
-  Mic,
-  UserRound,
+  Play,
+  Target,
+  TrendingUp,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { ApiError, getProfile, listInterviewHistory } from '../lib/api';
-
-const upcomingModules = [
-  { label: 'Mock interviews', icon: CalendarClock, to: '/interview/new' },
-  { label: 'Resume analysis', icon: FileText },
-  { label: 'GitHub analysis', icon: Github },
-  { label: 'Voice interviews', icon: Mic },
-  { label: 'Live coding', icon: Code2, to: '/interview/new' },
-  { label: 'User profile', icon: UserRound, to: '/profile' },
-];
+import { ApiError, getProfile, getProgressOverview, listInterviewHistory } from '../lib/api';
 
 const modeLabel: Record<InterviewMode, string> = {
   behavioral: 'Behavioral',
@@ -30,6 +25,14 @@ const modeLabel: Record<InterviewMode, string> = {
   'system-design': 'System design',
   'resume-deep-dive': 'Resume deep dive',
 };
+
+const modeFilters: Array<InterviewMode | 'all'> = [
+  'all',
+  'coding',
+  'system-design',
+  'behavioral',
+  'resume-deep-dive',
+];
 
 const averageScore = (scores: InterviewSessionSummary['scores']): number =>
   Math.round(
@@ -42,245 +45,355 @@ const formatDate = (iso: string): string =>
 const roleLabel = (profile: UserProfile): string =>
   `${profile.seniority.replace('-', ' ')} ${profile.targetRole.replace('-', ' ')}`;
 
-const recommendedSession = (profile: UserProfile): { label: string; detail: string } => {
-  if (profile.weakAreas.some((area) => /system|scale|design/i.test(area))) {
-    return {
-      label: 'System design',
-      detail: 'Practice scope, scale, bottlenecks, and tradeoffs.',
-    };
+const StatCard = ({ label, value, detail }: { label: string; value: string; detail: string }) => (
+  <div className="rounded-md border border-white/10 bg-surface p-5">
+    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite">{label}</p>
+    <p className="mt-3 text-3xl font-bold text-ink">{value}</p>
+    <p className="mt-2 text-sm text-graphite">{detail}</p>
+  </div>
+);
+
+const ScoreTrend = ({ overview }: { overview: ProgressOverview }) => {
+  const maxScore = Math.max(100, ...overview.trend.map((point) => point.score));
+
+  if (overview.trend.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-white/15 bg-surface/60 p-5 text-sm text-graphite">
+        Finish an interview to start building your score trend.
+      </div>
+    );
   }
-  if (profile.weakAreas.some((area) => /behavior|story|leadership|communication/i.test(area))) {
-    return {
-      label: 'Behavioral',
-      detail: 'Sharpen specific stories with role, tradeoffs, and outcomes.',
-    };
-  }
-  if (profile.weakAreas.some((area) => /resume|project|github/i.test(area))) {
-    return {
-      label: 'Resume deep dive',
-      detail: 'Go deep on technical ownership and project decisions.',
-    };
-  }
-  return {
-    label: 'Coding',
-    detail: `Use ${profile.preferredLanguage} and talk through complexity before implementation.`,
-  };
-};
-
-const ProfileSummary = () => {
-  const [profile, setProfile] = useState<UserProfile>();
-
-  useEffect(() => {
-    let cancelled = false;
-    getProfile()
-      .then((loaded) => {
-        if (!cancelled) setProfile(loaded);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!profile) return null;
-
-  const recommendation = recommendedSession(profile);
 
   return (
-    <div className="mt-6 grid gap-4 md:grid-cols-[1fr_auto]">
-      <div className="rounded-md border border-white/10 bg-surface p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-signal">
-          Current target
-        </p>
-        <h2 className="mt-2 text-xl font-bold capitalize text-ink">{roleLabel(profile)}</h2>
-        <p className="mt-2 text-sm leading-6 text-graphite">{profile.interviewGoal}</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {profile.targetCompanies.map((company) => (
-            <span
-              key={company}
-              className="rounded-full bg-slatewash px-3 py-1 text-xs text-graphite"
-            >
-              {company}
-            </span>
-          ))}
-          {profile.weakAreas.map((area) => (
-            <span
-              key={area}
-              className="rounded-full bg-amberline/10 px-3 py-1 text-xs text-amberline"
-            >
-              {area}
-            </span>
-          ))}
-        </div>
+    <div className="rounded-md border border-white/10 bg-surface p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-ink">Score trend</h2>
+        <TrendingUp className="text-signal" size={20} aria-hidden="true" />
       </div>
-      <Link
-        to="/interview/new"
-        className="rounded-md border border-signal/30 bg-signal/10 p-5 transition hover:bg-signal/15 md:w-80"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-signal">
-          Recommended next
-        </p>
-        <h2 className="mt-2 text-xl font-bold text-ink">{recommendation.label}</h2>
-        <p className="mt-2 text-sm leading-6 text-graphite">{recommendation.detail}</p>
-      </Link>
+      <div className="mt-6 flex h-44 items-end gap-2">
+        {overview.trend.map((point) => (
+          <Link
+            key={point.sessionId}
+            to={`/interview/${point.sessionId}/report`}
+            className="group flex min-w-0 flex-1 flex-col items-center gap-2"
+            title={`${point.problemTitle}: ${point.score}/100`}
+          >
+            <div className="flex h-32 w-full items-end rounded-sm bg-canvas">
+              <div
+                className="w-full rounded-sm bg-signal transition group-hover:brightness-110"
+                style={{ height: `${Math.max(8, (point.score / maxScore) * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs font-semibold text-graphite">{point.score}</span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 };
 
-const InterviewHistorySection = () => {
+const WeaknessPanel = ({ overview }: { overview: ProgressOverview }) => (
+  <div className="rounded-md border border-white/10 bg-surface p-5">
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="text-lg font-semibold text-ink">Weakness tracker</h2>
+      <CircleAlert className="text-amberline" size={20} aria-hidden="true" />
+    </div>
+
+    {overview.weakAreas.length === 0 ? (
+      <p className="mt-4 text-sm leading-6 text-graphite">
+        No repeated weak areas yet. Complete a few interviews and the evidence trail will start
+        clustering patterns.
+      </p>
+    ) : (
+      <div className="mt-4 space-y-3">
+        {overview.weakAreas.map((area) => (
+          <div key={area.label} className="rounded-md border border-white/10 bg-canvas/40 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold text-ink">{area.label}</p>
+              <span
+                className={[
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  area.severity === 'critical'
+                    ? 'bg-red-500/15 text-red-300'
+                    : 'bg-amberline/15 text-amberline',
+                ].join(' ')}
+              >
+                {area.count}x
+              </span>
+            </div>
+            {area.latestEvidence && (
+              <p className="mt-2 text-sm leading-6 text-graphite">{area.latestEvidence}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+const PracticePlanPanel = ({ overview }: { overview: ProgressOverview }) => (
+  <div className="rounded-md border border-white/10 bg-surface p-5">
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="text-lg font-semibold text-ink">Practice plan</h2>
+      <Target className="text-signal" size={20} aria-hidden="true" />
+    </div>
+    <div className="mt-4 space-y-3">
+      {overview.practicePlan.map((item) => (
+        <div key={item.title} className="rounded-md border border-white/10 bg-canvas/40 p-3">
+          <p className="font-semibold text-ink">{item.title}</p>
+          <p className="mt-2 text-sm leading-6 text-graphite">{item.detail}</p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.1em] text-signal">
+            {item.source}
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const HistoryTable = ({ history }: { history: InterviewSessionSummary[] }) => {
+  const [filter, setFilter] = useState<InterviewMode | 'all'>('all');
+  const filtered = useMemo(
+    () => history.filter((session) => filter === 'all' || session.mode === filter),
+    [filter, history],
+  );
+
+  return (
+    <div className="rounded-md border border-white/10 bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-4">
+        <h2 className="text-lg font-semibold text-ink">Interview history</h2>
+        <div className="flex flex-wrap gap-2">
+          {modeFilters.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setFilter(item)}
+              className={[
+                'rounded-md px-3 py-1.5 text-xs font-semibold transition',
+                filter === item
+                  ? 'bg-signal text-canvas'
+                  : 'bg-canvas text-graphite hover:bg-slatewash hover:text-ink',
+              ].join(' ')}
+            >
+              {item === 'all' ? 'All' : modeLabel[item]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="p-5 text-sm text-graphite">No interviews match this filter yet.</p>
+      ) : (
+        <ul className="divide-y divide-white/10">
+          {filtered.map((session) => {
+            const to =
+              session.status === 'completed'
+                ? `/interview/${session.id}/report`
+                : `/interview/${session.id}`;
+            return (
+              <li key={session.id}>
+                <Link
+                  to={to}
+                  className="grid gap-3 p-4 transition hover:bg-slatewash md:grid-cols-[1fr_auto_auto]"
+                >
+                  <div>
+                    <p className="font-semibold text-ink">{session.problemTitle}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.08em] text-graphite">
+                      {modeLabel[session.mode]} / {session.strictness} /{' '}
+                      {formatDate(session.startedAt)}
+                    </p>
+                  </div>
+                  <span
+                    className={[
+                      'w-fit rounded-full px-3 py-1 text-xs font-semibold md:self-center',
+                      session.status === 'completed'
+                        ? 'bg-signal/15 text-signal'
+                        : 'bg-amberline/15 text-amberline',
+                    ].join(' ')}
+                  >
+                    {session.status === 'completed'
+                      ? `${averageScore(session.scores)}/100`
+                      : 'Continue'}
+                  </span>
+                  <ArrowRight className="hidden text-graphite md:block md:self-center" size={16} />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+};
+
+export const DashboardPage = () => {
+  const [profile, setProfile] = useState<UserProfile>();
+  const [overview, setOverview] = useState<ProgressOverview>();
   const [history, setHistory] = useState<InterviewSessionSummary[]>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     let cancelled = false;
-    listInterviewHistory()
-      .then((sessions) => {
-        if (!cancelled) setHistory(sessions);
+
+    Promise.all([getProfile(), getProgressOverview(), listInterviewHistory()])
+      .then(([loadedProfile, loadedOverview, loadedHistory]) => {
+        if (cancelled) return;
+        setProfile(loadedProfile);
+        setOverview(loadedOverview);
+        setHistory(loadedHistory);
       })
       .catch((caught) => {
         if (!cancelled) {
-          setError(
-            caught instanceof ApiError ? caught.message : 'Could not load interview history.',
-          );
+          setError(caught instanceof ApiError ? caught.message : 'Could not load dashboard.');
         }
       });
+
     return () => {
       cancelled = true;
     };
   }, []);
 
   if (error) {
-    return <p className="mt-4 text-sm font-medium text-red-400">{error}</p>;
+    return (
+      <section className="mx-auto max-w-3xl px-4 py-16 text-center">
+        <p className="text-sm font-medium text-red-400">{error}</p>
+      </section>
+    );
   }
 
-  if (!history) {
+  if (!profile || !overview || !history) {
     return (
-      <div className="mt-4 flex items-center gap-2 text-sm text-graphite">
-        <Loader2 className="animate-spin" size={16} aria-hidden="true" />
-        Loading interview history…
+      <div className="flex min-h-[60vh] items-center justify-center gap-3 text-graphite">
+        <Loader2 className="animate-spin" size={20} aria-hidden="true" />
+        Loading progress
       </div>
     );
   }
 
-  if (history.length === 0) {
-    return (
-      <p className="mt-4 rounded-md border border-dashed border-white/15 bg-surface/60 p-5 text-sm text-graphite">
-        No interviews yet. Start your first mock interview to see it here.
-      </p>
-    );
-  }
+  const latestActive = overview.activeInterviews[0];
 
   return (
-    <ul className="mt-4 divide-y divide-white/10 overflow-hidden rounded-md border border-white/10 bg-surface">
-      {history.map((session) => {
-        const to =
-          session.status === 'completed'
-            ? `/interview/${session.id}/report`
-            : `/interview/${session.id}`;
-        return (
-          <li key={session.id}>
+    <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="flex flex-col gap-4 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Dashboard</p>
+          <h1 className="mt-3 text-4xl font-bold text-ink">Interview progress</h1>
+          <p className="mt-3 max-w-2xl leading-7 text-graphite">
+            Calibrated for a <span className="capitalize text-ink">{roleLabel(profile)}</span>.
+            Track your sessions, repeated misses, score trend, and next drills.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {latestActive && (
             <Link
-              to={to}
-              className="flex flex-col gap-2 p-4 transition hover:bg-slatewash sm:flex-row sm:items-center sm:justify-between"
+              to={`/interview/${latestActive.id}`}
+              className="inline-flex items-center gap-2 rounded-md border border-amberline/30 bg-amberline/10 px-4 py-3 text-sm font-semibold text-amberline transition hover:bg-amberline/15"
             >
-              <div>
+              <Play size={16} aria-hidden="true" />
+              Continue interview
+            </Link>
+          )}
+          <Link
+            to="/interview/new"
+            className="inline-flex items-center gap-2 rounded-md bg-signal px-4 py-3 text-sm font-semibold text-canvas shadow-glow transition hover:brightness-110"
+          >
+            Start new interview
+            <ArrowRight size={16} aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard
+          label="Completed"
+          value={String(overview.completedCount)}
+          detail={`${overview.activeCount} active`}
+        />
+        <StatCard
+          label="Average"
+          value={`${overview.averageScore}/100`}
+          detail="Across completed interviews"
+        />
+        <StatCard label="Best" value={`${overview.bestScore}/100`} detail="Highest report score" />
+        <StatCard
+          label="Latest"
+          value={overview.latestScore === undefined ? '--' : `${overview.latestScore}/100`}
+          detail="Most recent completed round"
+        />
+        <StatCard
+          label="Reports"
+          value={String(overview.recentReports.length)}
+          detail="Cached coaching reports"
+        />
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <ScoreTrend overview={overview} />
+        <WeaknessPanel overview={overview} />
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+        <PracticePlanPanel overview={overview} />
+
+        <div className="rounded-md border border-white/10 bg-surface p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-ink">Recent reports</h2>
+            <BarChart3 className="text-signal" size={20} aria-hidden="true" />
+          </div>
+          {overview.recentReports.length === 0 ? (
+            <p className="mt-4 text-sm leading-6 text-graphite">
+              Finish an interview and generate the report to see recent debriefs here.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {overview.recentReports.map((report) => (
+                <Link
+                  key={report.sessionId}
+                  to={`/interview/${report.sessionId}/report`}
+                  className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-canvas/40 p-3 transition hover:border-signal/40"
+                >
+                  <div>
+                    <p className="font-semibold text-ink">{report.problemTitle}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.08em] text-graphite">
+                      {modeLabel[report.mode]} / {formatDate(report.completedAt)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-signal/15 px-3 py-1 text-xs font-semibold text-signal">
+                    {report.overallScore}/100
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {overview.activeInterviews.length > 0 && (
+        <div className="mt-6 rounded-md border border-white/10 bg-surface p-5">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="text-amberline" size={20} aria-hidden="true" />
+            <h2 className="text-lg font-semibold text-ink">Active interviews</h2>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {overview.activeInterviews.map((session) => (
+              <Link
+                key={session.id}
+                to={`/interview/${session.id}`}
+                className="rounded-md border border-white/10 bg-canvas/40 p-3 transition hover:border-amberline/40"
+              >
                 <p className="font-semibold text-ink">{session.problemTitle}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.08em] text-graphite">
-                  {modeLabel[session.mode]} · {session.strictness} · {formatDate(session.startedAt)}
+                  {modeLabel[session.mode]} / started {formatDate(session.startedAt)}
                 </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={
-                    session.status === 'completed'
-                      ? 'rounded-full bg-signal/15 px-3 py-1 text-xs font-semibold text-signal'
-                      : 'rounded-full bg-amberline/15 px-3 py-1 text-xs font-semibold text-amberline'
-                  }
-                >
-                  {session.status === 'completed'
-                    ? `Score ${averageScore(session.scores)}/10`
-                    : 'In progress'}
-                </span>
-                <ArrowRight className="text-graphite" size={16} aria-hidden="true" />
-              </div>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6">
+        <HistoryTable history={history} />
+      </div>
+    </section>
   );
 };
-
-export const DashboardPage = () => (
-  <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-    <div className="flex flex-col gap-4 border-b border-white/10 pb-8 md:flex-row md:items-end md:justify-between">
-      <div>
-        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">Dashboard</p>
-        <h1 className="mt-3 text-4xl font-bold text-ink">Platform command center</h1>
-        <p className="mt-4 max-w-2xl leading-8 text-graphite">
-          Your interview history lives here, alongside the modules that are live today and the ones
-          still on the roadmap.
-        </p>
-      </div>
-      <Link
-        to="/interview/new"
-        className="inline-flex w-fit items-center gap-2 rounded-md bg-signal px-4 py-3 text-sm font-semibold text-canvas shadow-glow transition hover:brightness-110"
-      >
-        Start a mock interview
-        <ArrowRight size={16} aria-hidden="true" />
-      </Link>
-    </div>
-
-    <div className="mt-6 inline-flex items-center gap-2 rounded-md border border-white/10 bg-surface px-4 py-3 text-sm font-semibold text-ink">
-      <Activity className="text-signal" size={18} aria-hidden="true" />
-      API health ready
-    </div>
-
-    <ProfileSummary />
-
-    <div className="mt-10">
-      <h2 className="text-lg font-semibold text-ink">Interview history</h2>
-      <InterviewHistorySection />
-    </div>
-
-    <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {upcomingModules.map((module) => {
-        const Icon = module.icon;
-        const content = (
-          <>
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-ink">{module.label}</h2>
-              <Icon className="text-signal" size={21} aria-hidden="true" />
-            </div>
-            <p className="mt-4 text-sm leading-6 text-graphite">
-              {module.to
-                ? 'Live now. Click to begin.'
-                : 'Reserved module boundary. Implementation belongs in a future feature slice.'}
-            </p>
-          </>
-        );
-
-        if (module.to) {
-          return (
-            <Link
-              key={module.label}
-              to={module.to}
-              className="rounded-md border border-white/10 bg-surface p-5 transition hover:border-signal/40 hover:shadow-glow"
-            >
-              {content}
-            </Link>
-          );
-        }
-
-        return (
-          <article
-            key={module.label}
-            className="rounded-md border border-white/10 bg-surface/60 p-5"
-          >
-            {content}
-          </article>
-        );
-      })}
-    </div>
-  </section>
-);

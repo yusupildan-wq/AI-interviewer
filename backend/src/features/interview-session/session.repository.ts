@@ -4,6 +4,8 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { interviewSessions } from '../../db/schema.js';
 import { findProblemById } from '../problems/problems.data.js';
+import { createInterviewMemory } from './interview-memory.service.js';
+import { createInterviewPlan } from './interview-plan.service.js';
 
 export interface SessionRepository {
   create(session: InterviewSession): Promise<InterviewSession>;
@@ -29,6 +31,8 @@ const toInterviewSession = (row: InterviewSessionRow): InterviewSession => {
     strictness: row.strictness,
     problem,
     persona: row.persona,
+    plan: row.plan ?? createInterviewPlan(row.mode),
+    memory: row.memory ?? createInterviewMemory(row.mode),
     status: row.status,
     transcript: row.transcript,
     codeHistory: row.codeHistory,
@@ -49,6 +53,8 @@ class PostgresSessionRepository implements SessionRepository {
       strictness: session.strictness,
       problemId: session.problem.id,
       persona: session.persona,
+      plan: session.plan,
+      memory: session.memory,
       status: session.status,
       scores: session.scores,
       transcript: session.transcript,
@@ -73,6 +79,8 @@ class PostgresSessionRepository implements SessionRepository {
       .update(interviewSessions)
       .set({
         status: session.status,
+        plan: session.plan,
+        memory: session.memory,
         scores: session.scores,
         transcript: session.transcript,
         codeHistory: session.codeHistory,

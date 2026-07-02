@@ -1,8 +1,11 @@
 import type {
   CodingLanguage,
   CodeSnapshot,
+  CoachingIntelligence,
   HireRecommendation,
+  InterviewMemory,
   InterviewMode,
+  InterviewPlan,
   InterviewStatus,
   InterviewerPersona,
   InterviewerStrictness,
@@ -65,6 +68,8 @@ export const interviewSessions = pgTable('interview_sessions', {
   strictness: text('strictness').$type<InterviewerStrictness>().notNull(),
   problemId: text('problem_id').notNull(),
   persona: jsonb('persona').$type<InterviewerPersona>().notNull(),
+  plan: jsonb('plan').$type<InterviewPlan>(),
+  memory: jsonb('memory').$type<InterviewMemory>(),
   status: text('status').$type<InterviewStatus>().notNull(),
   scores: jsonb('scores').$type<ScoreRubric>().notNull(),
   transcript: jsonb('transcript').$type<TranscriptEntry[]>().notNull().default([]),
@@ -87,5 +92,6 @@ export const feedbackReports = pgTable('feedback_reports', {
   growthAreas: jsonb('growth_areas').$type<string[]>().notNull(),
   notableMoments: jsonb('notable_moments').$type<{ quote: string; note: string }[]>().notNull(),
   recommendation: text('recommendation').$type<HireRecommendation>().notNull(),
+  coaching: jsonb('coaching').$type<CoachingIntelligence>(),
   generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
 });

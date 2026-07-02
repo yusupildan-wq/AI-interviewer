@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   CodeSnapshot,
+  CandidateSignals,
+  DecisionEngineOutput,
   InterventionType,
   InterviewMode,
   InterviewSession,
@@ -15,6 +17,8 @@ import type {
 
 import { HttpError } from '../../shared/http-error.js';
 import { findProblemById, pickRandomProblemForMode } from '../problems/problems.data.js';
+import { createInterviewMemory, updateInterviewMemory } from './interview-memory.service.js';
+import { createInterviewPlan, updateInterviewPlan } from './interview-plan.service.js';
 import { sessionRepository } from './session.repository.js';
 
 const BASELINE_SCORE = 50;
@@ -147,6 +151,8 @@ export const createSession = async (
     strictness,
     problem,
     persona: interviewerPersonaFor(strictness),
+    plan: createInterviewPlan(mode, profile),
+    memory: createInterviewMemory(mode),
     status: 'active',
     transcript: [
       {
@@ -221,6 +227,22 @@ export const appendCandidateMessage = async (
   return { session, entry, codeSnapshot };
 };
 
+export const applyCandidateSignalsToPlan = async (
+  sessionId: string,
+  signals: CandidateSignals,
+  currentCode: string | undefined,
+): Promise<InterviewSession> => {
+  const session = await requireActiveSession(sessionId);
+  session.plan = updateInterviewPlan(
+    session.plan,
+    session.mode,
+    session.transcript,
+    signals,
+    currentCode,
+  );
+  return sessionRepository.save(session);
+};
+
 export const appendInterviewerMessage = async (
   sessionId: string,
   content: string,
@@ -242,6 +264,24 @@ export const appendInterviewerMessage = async (
   await sessionRepository.save(session);
 
   return { session, entry };
+};
+
+export const applyInterviewMemoryUpdate = async (
+  sessionId: string,
+  signals: CandidateSignals,
+  decision: DecisionEngineOutput,
+  currentCode: string | undefined,
+): Promise<InterviewSession> => {
+  const session = await requireActiveSession(sessionId);
+  session.memory = updateInterviewMemory(
+    session.memory,
+    session.mode,
+    session.transcript,
+    signals,
+    decision,
+    currentCode,
+  );
+  return sessionRepository.save(session);
 };
 
 export const applyScoreImpact = async (

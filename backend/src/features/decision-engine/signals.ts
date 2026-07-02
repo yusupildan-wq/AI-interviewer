@@ -37,6 +37,43 @@ const EDGE_CASE_PHRASES = [
   'corner case',
 ];
 
+const CLARIFYING_PHRASES = [
+  '?',
+  'clarify',
+  'assume',
+  'should i',
+  'can i assume',
+  'are we given',
+  'is it possible',
+  'do we need',
+  'what should happen',
+];
+
+const TRADEOFF_PHRASES = [
+  'tradeoff',
+  'trade-off',
+  'alternative',
+  'because',
+  'instead',
+  'pros',
+  'cons',
+  'latency',
+  'memory',
+  'throughput',
+  'consistency',
+];
+
+const TESTING_PHRASES = [
+  'test',
+  'tests',
+  'case',
+  'walk through',
+  'dry run',
+  'example',
+  'verify',
+  'validate',
+];
+
 const countPhraseOccurrences = (text: string, phrases: string[]): number => {
   const normalized = text.toLowerCase();
   return phrases.reduce((count, phrase) => (normalized.includes(phrase) ? count + 1 : count), 0);
@@ -78,7 +115,10 @@ export const computeCandidateSignals = ({
     hedgingPhraseCount: countPhraseOccurrences(message, HEDGING_PHRASES),
     codeLinesChangedSinceLastTurn: latestCodeSnapshot?.linesChanged ?? 0,
     rapidEditCount: countRapidEdits(codeHistory, now),
+    asksClarifyingQuestion: containsAnyPhrase(message, CLARIFYING_PHRASES),
     mentionsComplexity: containsAnyPhrase(message, COMPLEXITY_PHRASES),
     mentionsEdgeCases: containsAnyPhrase(message, EDGE_CASE_PHRASES),
+    mentionsTradeoffs: containsAnyPhrase(message, TRADEOFF_PHRASES),
+    mentionsTesting: containsAnyPhrase(message, TESTING_PHRASES),
   };
 };

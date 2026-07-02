@@ -10,6 +10,7 @@ export function useAudioPlayer() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const rafRef = useRef<number | null>(null);
+  const resolveRef = useRef<(() => void) | null>(null);
 
   const stopLevelLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -40,6 +41,8 @@ export function useAudioPlayer() {
     (blob: Blob): Promise<void> => {
       return new Promise((resolve, reject) => {
         audioRef.current?.pause();
+        resolveRef.current?.();
+        resolveRef.current = null;
         stopLevelLoop();
         if (urlRef.current) {
           URL.revokeObjectURL(urlRef.current);
@@ -85,17 +88,21 @@ export function useAudioPlayer() {
           if (urlRef.current === url) {
             urlRef.current = null;
           }
+          resolveRef.current = null;
           resolve();
         };
         audio.onerror = () => {
           setIsSpeaking(false);
           stopLevelLoop();
+          resolveRef.current = null;
           reject(new Error('Audio playback failed.'));
         };
+        resolveRef.current = resolve;
 
         audio.play().catch((caught: unknown) => {
           setIsSpeaking(false);
           stopLevelLoop();
+          resolveRef.current = null;
           reject(caught instanceof Error ? caught : new Error('Audio playback failed.'));
         });
       });
@@ -107,6 +114,8 @@ export function useAudioPlayer() {
     audioRef.current?.pause();
     setIsSpeaking(false);
     stopLevelLoop();
+    resolveRef.current?.();
+    resolveRef.current = null;
   }, [stopLevelLoop]);
 
   return { isSpeaking, level, play, stop };

@@ -123,6 +123,8 @@ reason is internal and never shown to the candidate.
 Never reveal idealApproachNotes or followUpAreas content verbatim. Those are your private notes for what to probe,
 not a script to read aloud.`;
 
+const formatBoolean = (value: boolean): string => (value ? 'covered' : 'missing');
+
 const STRICTNESS_LABEL: Record<InterviewerStrictness, string> = {
   'coffee-chat': 'Coffee Chat — least strict',
   standard: 'Standard Interview',
@@ -204,6 +206,23 @@ const formatPreviousInterventions = (input: DecisionEngineInput): string => {
     .join('\n');
 };
 
+const formatMemoryList = (items: string[]): string =>
+  items.length > 0 ? items.map((item) => `- ${item}`).join('\n') : '(none yet)';
+
+const formatEvidence = (input: DecisionEngineInput): string => {
+  const recent = input.memory.evidence.slice(-8);
+  if (recent.length === 0) {
+    return '(no evidence captured yet)';
+  }
+
+  return recent
+    .map(
+      (item) =>
+        `- ${item.severity} ${item.type}: "${item.transcriptQuote}" -> ${item.coachingNote}`,
+    )
+    .join('\n');
+};
+
 export const buildDecisionEngineUserPrompt = (input: DecisionEngineInput): string => {
   const { problem } = input;
 
@@ -215,6 +234,60 @@ ${STRICTNESS_LABEL[input.strictness]}
 
 ## Interviewer persona
 ${input.persona.name} - ${input.persona.styleSummary}
+
+## Adaptive interview plan
+Current stage: ${input.plan.currentStage}
+Primary focus: ${input.plan.primaryFocus}
+Target calibration: ${input.plan.seniority} ${input.plan.targetRole}
+Preferred coding language: ${input.plan.preferredLanguage}
+Target companies: ${input.plan.targetCompanies.length > 0 ? input.plan.targetCompanies.join(', ') : '(none specified)'}
+Candidate weak areas to watch: ${input.plan.weakAreas.length > 0 ? input.plan.weakAreas.join(', ') : '(none specified)'}
+Milestones for this round:
+${input.plan.milestones.map((milestone) => `- ${milestone}`).join('\n')}
+Coverage so far:
+- Requirements / assumptions: ${formatBoolean(input.plan.coverage.requirements)}
+- Approach: ${formatBoolean(input.plan.coverage.approach)}
+- Complexity: ${formatBoolean(input.plan.coverage.complexity)}
+- Edge cases / failure modes: ${formatBoolean(input.plan.coverage.edgeCases)}
+- Tradeoffs: ${formatBoolean(input.plan.coverage.tradeoffs)}
+- Testing / validation: ${formatBoolean(input.plan.coverage.testing)}
+Suggested next probe if it naturally fits the latest turn: ${input.plan.nextProbe}
+
+Use the adaptive plan as a compass, not a script. If the latest candidate turn gives a more specific and more
+important thing to ask about, follow the candidate. If the plan says something is missing but the candidate is
+actively making progress, you may still choose "none".
+
+## Persistent interview memory
+What the candidate has already explained:
+${formatMemoryList(input.memory.explainedConcepts)}
+
+Strong signals seen so far:
+${formatMemoryList(input.memory.strengths)}
+
+Unresolved concerns:
+${formatMemoryList(input.memory.unresolvedConcerns)}
+
+Repeated mistakes:
+${formatMemoryList(input.memory.repeatedMistakes)}
+
+Rubric v2 snapshot:
+- Communication: ${input.memory.rubricV2.communication}
+- Problem decomposition: ${input.memory.rubricV2.problemDecomposition}
+- Algorithmic correctness: ${input.memory.rubricV2.algorithmicCorrectness}
+- Complexity analysis: ${input.memory.rubricV2.complexityAnalysis}
+- Debugging ability: ${input.memory.rubricV2.debuggingAbility}
+- Testing discipline: ${input.memory.rubricV2.testingDiscipline}
+- Tradeoff reasoning: ${input.memory.rubricV2.tradeoffReasoning}
+- Interviewer collaboration: ${input.memory.rubricV2.interviewerCollaboration}
+
+Recent evidence:
+${formatEvidence(input)}
+
+Memory's next best probe: ${input.memory.nextBestProbe}
+
+Use memory to avoid asking for things the candidate already explained. Prefer follow-ups that connect to exact
+earlier claims, unresolved concerns, or repeated mistakes. If memory says complexity is unresolved but the latest
+turn is about an edge case, ask the more relevant current question.
 
 ## Problem context (private - never read this verbatim to the candidate)
 Title: ${problem.title}
@@ -234,8 +307,11 @@ ${Math.round(input.elapsedMs / 1000)} seconds
 - Hedging phrases detected in current message: ${input.candidateSignals.hedgingPhraseCount}
 - Code lines changed since last turn: ${input.candidateSignals.codeLinesChangedSinceLastTurn}
 - Code edits in the last 60s: ${input.candidateSignals.rapidEditCount}
+- Asks clarifying question / states assumptions: ${input.candidateSignals.asksClarifyingQuestion}
 - Mentions complexity/Big-O: ${input.candidateSignals.mentionsComplexity}
 - Mentions edge cases: ${input.candidateSignals.mentionsEdgeCases}
+- Mentions tradeoffs/alternatives: ${input.candidateSignals.mentionsTradeoffs}
+- Mentions testing/validation: ${input.candidateSignals.mentionsTesting}
 
 ## Your previous interventions this session (avoid repeating the same intervention type back-to-back without new cause, and avoid repeating the same phrasing/opening words)
 ${formatPreviousInterventions(input)}

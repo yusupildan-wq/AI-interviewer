@@ -43,8 +43,53 @@ ${session.problem.prompt}
 - Technical depth: ${session.scores.technicalDepth}
 - Confidence: ${session.scores.confidence}
 
+## Rubric v2 diagnostic scores (0-100, use for coaching specificity)
+- Communication: ${session.memory.rubricV2.communication}
+- Problem decomposition: ${session.memory.rubricV2.problemDecomposition}
+- Algorithmic correctness: ${session.memory.rubricV2.algorithmicCorrectness}
+- Complexity analysis: ${session.memory.rubricV2.complexityAnalysis}
+- Debugging ability: ${session.memory.rubricV2.debuggingAbility}
+- Testing discipline: ${session.memory.rubricV2.testingDiscipline}
+- Tradeoff reasoning: ${session.memory.rubricV2.tradeoffReasoning}
+- Interviewer collaboration: ${session.memory.rubricV2.interviewerCollaboration}
+
+## Evidence captured during the interview
+${
+  session.memory.evidence.length > 0
+    ? session.memory.evidence
+        .slice(-12)
+        .map(
+          (item) =>
+            `- ${item.severity} ${item.type}: "${item.transcriptQuote}" -> ${item.coachingNote}`,
+        )
+        .join('\n')
+    : '(no structured evidence captured)'
+}
+
+## Persistent memory
+Explained concepts: ${session.memory.explainedConcepts.join(', ') || 'none'}
+Strengths: ${session.memory.strengths.join(', ') || 'none'}
+Unresolved concerns: ${session.memory.unresolvedConcerns.join(', ') || 'none'}
+Repeated mistakes: ${session.memory.repeatedMistakes.join(', ') || 'none'}
+
 ## Interviewer interventions during the session
 ${session.interventionCount}
+
+## Adaptive interview plan at completion
+- Stage reached: ${session.plan.currentStage}
+- Primary focus: ${session.plan.primaryFocus}
+- Target role: ${session.plan.seniority} ${session.plan.targetRole}
+- Preferred language: ${session.plan.preferredLanguage}
+- Target companies: ${session.plan.targetCompanies.join(', ') || 'not specified'}
+- Known weak areas: ${session.plan.weakAreas.join(', ') || 'not specified'}
+- Coverage:
+  - Requirements: ${session.plan.coverage.requirements ? 'covered' : 'not covered'}
+  - Approach: ${session.plan.coverage.approach ? 'covered' : 'not covered'}
+  - Complexity: ${session.plan.coverage.complexity ? 'covered' : 'not covered'}
+  - Edge cases: ${session.plan.coverage.edgeCases ? 'covered' : 'not covered'}
+  - Tradeoffs: ${session.plan.coverage.tradeoffs ? 'covered' : 'not covered'}
+  - Testing: ${session.plan.coverage.testing ? 'covered' : 'not covered'}
+- Next interviewer probe if the session continued: ${session.plan.nextProbe}
 
 ## Final code submitted (if applicable)
 ${session.codeHistory.at(-1)?.code ?? '(no code submitted)'}

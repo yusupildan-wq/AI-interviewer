@@ -1,6 +1,7 @@
 import type {
   CreateInterviewRequest,
   DecisionEngineInput,
+  FeedbackFollowUpRequest,
   InterviewMode,
   InterviewSession,
   InterviewerStrictness,
@@ -15,7 +16,7 @@ import type { AuthenticatedRequest } from '../auth/auth.middleware.js';
 import { runDecisionEngine } from '../decision-engine/decision-engine.service.js';
 import { computeCandidateSignals } from '../decision-engine/signals.js';
 import { findCachedFeedbackReport, saveFeedbackReport } from '../feedback/feedback.repository.js';
-import { generateFeedbackReport } from '../feedback/feedback.service.js';
+import { answerFeedbackFollowUp, generateFeedbackReport } from '../feedback/feedback.service.js';
 import { getOrCreateUserProfile } from '../profile/profile.service.js';
 import { candidateSafeProblem } from '../problems/problems.data.js';
 import { asyncHandler } from '../../shared/async-handler.js';
@@ -24,6 +25,8 @@ import { requireParam } from '../../shared/require-param.js';
 import {
   appendCandidateMessage,
   appendInterviewerMessage,
+  applyCandidateSignalsToPlan,
+  applyInterviewMemoryUpdate,
   applyScoreImpact,
   createSession,
   endSession,
@@ -131,18 +134,25 @@ interviewSessionRouter.post(
       message,
       latestCodeSnapshot: codeSnapshot,
     });
+    const sessionAfterPlanUpdate = await applyCandidateSignalsToPlan(
+      sessionId,
+      candidateSignals,
+      code,
+    );
 
-    const elapsedMs = Date.now() - new Date(sessionAfterCandidateTurn.startedAt).getTime();
-    const previousInterventions: TranscriptEntry[] = sessionAfterCandidateTurn.transcript.filter(
+    const elapsedMs = Date.now() - new Date(sessionAfterPlanUpdate.startedAt).getTime();
+    const previousInterventions: TranscriptEntry[] = sessionAfterPlanUpdate.transcript.filter(
       (item) => item.role === 'interviewer',
     );
 
     const decisionInput: DecisionEngineInput = {
-      mode: sessionAfterCandidateTurn.mode,
-      strictness: sessionAfterCandidateTurn.strictness,
-      problem: sessionAfterCandidateTurn.problem,
-      persona: sessionAfterCandidateTurn.persona,
-      transcript: sessionAfterCandidateTurn.transcript,
+      mode: sessionAfterPlanUpdate.mode,
+      strictness: sessionAfterPlanUpdate.strictness,
+      problem: sessionAfterPlanUpdate.problem,
+      persona: sessionAfterPlanUpdate.persona,
+      plan: sessionAfterPlanUpdate.plan,
+      memory: sessionAfterPlanUpdate.memory,
+      transcript: sessionAfterPlanUpdate.transcript,
       currentCandidateMessage: message,
       currentCode: code,
       elapsedMs,
@@ -165,11 +175,14 @@ interviewSessionRouter.post(
       ).entry;
     }
 
+    await applyInterviewMemoryUpdate(sessionId, candidateSignals, decision, code);
+
     const result: SubmitTurnResponse = {
       transcriptEntry: entry,
       interventionEntry,
       decision,
       scores: sessionAfterScoring.scores,
+      plan: sessionAfterPlanUpdate.plan,
     };
 
     response.json(result);
@@ -207,5 +220,29 @@ interviewSessionRouter.get(
     const report = await generateFeedbackReport(session);
     await saveFeedbackReport(report);
     response.json(report);
+  }),
+);
+
+interviewSessionRouter.post(
+  '/:id/report/follow-up',
+  asyncHandler(async (request, response) => {
+    const { user } = request as AuthenticatedRequest;
+    const sessionId = requireParam(request.params.id, 'id');
+    const body = request.body as Partial<FeedbackFollowUpRequest>;
+    const question = typeof body.question === 'string' ? body.question : '';
+
+    const session = await requireOwnedSession(sessionId, user.id);
+    if (session.status !== 'completed') {
+      throw new HttpError(409, 'End the interview before asking report follow-up questions.');
+    }
+
+    let report = await findCachedFeedbackReport(sessionId);
+    if (!report) {
+      report = await generateFeedbackReport(session);
+      await saveFeedbackReport(report);
+    }
+
+    const answer = await answerFeedbackFollowUp(session, report, question);
+    response.json({ answer });
   }),
 );

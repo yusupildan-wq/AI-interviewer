@@ -1,5 +1,7 @@
 import type {
+  FeedbackReport,
   InterviewMode,
+  InterviewStage,
   InterviewerStrictness,
   ScoreRubric,
   TranscriptEntry,
@@ -19,15 +21,17 @@ import {
   PhoneOff,
   Send,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { useAudioPlayer } from '../../hooks/useAudioPlayer';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import {
   ApiError,
+  askFeedbackFollowUp,
   type CandidateInterviewSession,
   endInterview,
+  getFeedbackReport,
   getInterview,
   submitTurn,
   synthesizeSpeech,
@@ -54,6 +58,8 @@ const STRICTNESS_LABEL: Record<InterviewerStrictness, string> = {
 };
 
 type SidePanel = 'problem' | 'code' | 'transcript' | 'score';
+type DebriefState = 'idle' | 'generating' | 'speaking' | 'ready' | 'answering';
+type DebriefMessage = { role: 'candidate' | 'interviewer'; content: string };
 
 const formatElapsed = (startedAt: string): string => {
   const elapsedSeconds = Math.max(
@@ -67,18 +73,14 @@ const formatElapsed = (startedAt: string): string => {
   return `${minutes}:${seconds}`;
 };
 
-const interviewStage = (
-  mode: InterviewMode,
-  transcript: TranscriptEntry[],
-  code: string,
-): string => {
-  const candidateTurns = transcript.filter((entry) => entry.role === 'candidate').length;
-
-  if (candidateTurns === 0) return 'Opening';
-  if (mode === 'coding' && code.trim() !== CODE_STARTER.trim()) return 'Implementation';
-  if (candidateTurns <= 2) return 'Discovery';
-  if (candidateTurns <= 5) return 'Deep dive';
-  return 'Evaluation';
+const STAGE_LABEL: Record<InterviewStage, string> = {
+  opening: 'Opening',
+  clarification: 'Clarification',
+  approach: 'Approach',
+  implementation: 'Implementation',
+  'deep-dive': 'Deep dive',
+  'edge-cases': 'Edge cases',
+  'wrap-up': 'Wrap-up',
 };
 
 const interviewerStatus = (state: AvatarState): string => {
@@ -93,6 +95,25 @@ const latestInterviewerMessage = (transcript: TranscriptEntry[]): TranscriptEntr
     .slice()
     .reverse()
     .find((entry) => entry.role === 'interviewer');
+
+const buildSpokenDebrief = (report: FeedbackReport): string => {
+  const strengths = report.strengths.slice(0, 2).join(' Also, ');
+  const growthAreas = report.growthAreas.slice(0, 2).join(' The next thing to improve is ');
+  const drills = report.coaching.nextDrills.slice(0, 2).join(' Then, ');
+
+  return [
+    `Now that the interview has concluded, here is your debrief.`,
+    `Overall, I scored this at ${report.overallScore} out of 100, with a ${report.recommendation.replaceAll('-', ' ')} recommendation.`,
+    report.summary,
+    strengths ? `What you did well: ${strengths}.` : '',
+    growthAreas ? `What I would improve first: ${growthAreas}.` : '',
+    `The main coaching focus is ${report.coaching.primaryFocus}.`,
+    drills ? `For practice: ${drills}.` : '',
+    `You can ask me follow-up questions about the feedback now.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
 
 export const InterviewRoomPage = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -109,6 +130,10 @@ export const InterviewRoomPage = () => {
   const [isEnding, setIsEnding] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [autoListenEnabled, setAutoListenEnabled] = useState(true);
+  const [debriefState, setDebriefState] = useState<DebriefState>('idle');
+  const [debriefReport, setDebriefReport] = useState<FeedbackReport | undefined>();
+  const [debriefMessages, setDebriefMessages] = useState<DebriefMessage[]>([]);
+  const [debriefQuestion, setDebriefQuestion] = useState('');
 
   const [showTypedFallback, setShowTypedFallback] = useState(false);
   const [typedMessage, setTypedMessage] = useState('');
@@ -146,11 +171,14 @@ export const InterviewRoomPage = () => {
   }, [session]);
 
   const isCoding = session?.mode === 'coding';
-  const isBusy = isProcessing;
+  const isDebriefLocked =
+    debriefState === 'generating' || debriefState === 'speaking' || debriefState === 'answering';
+  const isBusy = isProcessing || isDebriefLocked;
 
   const sendTurn = useCallback(
     async (text: string) => {
       if (!sessionId) return;
+      player.stop();
       setIsProcessing(true);
 
       try {
@@ -167,6 +195,8 @@ export const InterviewRoomPage = () => {
           return next;
         });
         setScores(result.scores);
+        setSession((previous) => (previous ? { ...previous, plan: result.plan } : previous));
+        setIsProcessing(false);
 
         if (result.interventionEntry?.content) {
           try {
@@ -202,7 +232,7 @@ export const InterviewRoomPage = () => {
 
   const handleVoiceBlob = useCallback(
     async (blob: Blob | undefined) => {
-      if (!blob || isProcessing) return;
+      if (!blob || isProcessing || isDebriefLocked || debriefReport) return;
 
       setIsProcessing(true);
       setError(undefined);
@@ -221,7 +251,7 @@ export const InterviewRoomPage = () => {
         setIsProcessing(false);
       }
     },
-    [isProcessing, sendTurn],
+    [debriefReport, isDebriefLocked, isProcessing, sendTurn],
   );
 
   useEffect(() => {
@@ -230,21 +260,30 @@ export const InterviewRoomPage = () => {
       !autoListenEnabled ||
       showTypedFallback ||
       isProcessing ||
-      isSpeaking ||
       isEnding ||
+      isDebriefLocked ||
+      debriefReport ||
       recorder.isRecording ||
       recorder.error
     ) {
       return;
     }
 
-    void recorder.start({ autoStop: true, onAutoStop: handleVoiceBlob });
+    void recorder.start({
+      autoStop: true,
+      onAutoStop: handleVoiceBlob,
+      onSpeechStart: isSpeaking ? player.stop : undefined,
+      speechThreshold: isSpeaking ? 0.055 : undefined,
+    });
   }, [
     autoListenEnabled,
+    debriefReport,
     handleVoiceBlob,
+    isDebriefLocked,
     isEnding,
     isProcessing,
     isSpeaking,
+    player.stop,
     recorder,
     session,
     showTypedFallback,
@@ -273,12 +312,64 @@ export const InterviewRoomPage = () => {
   const handleEnd = async () => {
     if (!sessionId || isEnding) return;
     setIsEnding(true);
+    setDebriefState('generating');
+    setAutoListenEnabled(false);
+    player.stop();
     try {
-      await endInterview(sessionId);
-      navigate(`/interview/${sessionId}/report`);
+      if (recorder.isRecording) {
+        await recorder.stop();
+      }
+      const completed = await endInterview(sessionId);
+      setSession(completed);
+      const report = await getFeedbackReport(sessionId);
+      setDebriefReport(report);
+      const spokenDebrief = buildSpokenDebrief(report);
+      setDebriefMessages([{ role: 'interviewer', content: spokenDebrief }]);
+
+      try {
+        setDebriefState('speaking');
+        const audioBlob = await synthesizeSpeech(spokenDebrief);
+        await player.play(audioBlob);
+      } catch (caught) {
+        setError(
+          caught instanceof ApiError ? caught.message : 'Could not play the spoken debrief.',
+        );
+      }
+
+      setDebriefState('ready');
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Could not end the interview.');
+      setDebriefState('idle');
       setIsEnding(false);
+    }
+  };
+
+  const handleDebriefFollowUp = async () => {
+    const question = debriefQuestion.trim();
+    if (!sessionId || !question || debriefState !== 'ready') return;
+
+    setDebriefQuestion('');
+    setDebriefState('answering');
+    setError(undefined);
+    setDebriefMessages((previous) => [...previous, { role: 'candidate', content: question }]);
+
+    try {
+      const { answer } = await askFeedbackFollowUp(sessionId, { question });
+      setDebriefMessages((previous) => [...previous, { role: 'interviewer', content: answer }]);
+      try {
+        const audioBlob = await synthesizeSpeech(answer);
+        await player.play(audioBlob);
+      } catch (caught) {
+        setError(
+          caught instanceof ApiError ? caught.message : 'Could not play the follow-up answer.',
+        );
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : 'Could not answer that follow-up question.',
+      );
+    } finally {
+      setDebriefState('ready');
     }
   };
 
@@ -286,15 +377,11 @@ export const InterviewRoomPage = () => {
     ? 'listening'
     : isSpeaking
       ? 'speaking'
-      : isProcessing
+      : isProcessing || debriefState === 'generating' || debriefState === 'answering'
         ? 'thinking'
         : 'idle';
 
   const combinedError = error ?? recorder.error;
-  const currentStage = useMemo(
-    () => (session ? interviewStage(session.mode, transcript, code) : 'Opening'),
-    [code, session, transcript],
-  );
   const latestPrompt = latestInterviewerMessage(transcript);
 
   if (isLoading) {
@@ -340,7 +427,7 @@ export const InterviewRoomPage = () => {
               {STRICTNESS_LABEL[session.strictness]}
             </span>
             <span className="rounded-full bg-slatewash px-2.5 py-1 text-[11px] font-semibold text-graphite">
-              {currentStage}
+              {STAGE_LABEL[session.plan.currentStage]}
             </span>
           </div>
         </div>
@@ -371,7 +458,7 @@ export const InterviewRoomPage = () => {
               {session.persona.name}
             </p>
             <h1 className="mt-1 truncate text-xl font-bold text-ink">{session.problem.title}</h1>
-            <p className="mt-1 text-sm text-graphite">Technical interview in progress</p>
+            <p className="mt-1 line-clamp-2 text-sm text-graphite">{session.plan.primaryFocus}</p>
           </div>
 
           {latestPrompt && (
@@ -389,7 +476,83 @@ export const InterviewRoomPage = () => {
             </div>
           )}
 
-          {showTypedFallback && (
+          {debriefReport && (
+            <div className="absolute bottom-24 left-4 right-4 max-h-[52%] overflow-hidden rounded-md border border-signal/30 bg-canvas/90 shadow-2xl backdrop-blur">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-signal">
+                    Interview debrief
+                  </p>
+                  <p className="mt-1 text-sm text-graphite">
+                    {debriefState === 'speaking'
+                      ? 'Alex is giving the final read. Hold follow-ups until he finishes.'
+                      : 'Ask follow-up questions about the feedback.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/interview/${session.id}/report`)}
+                  className="rounded-md border border-white/10 bg-surface px-3 py-2 text-sm font-semibold text-ink transition hover:bg-slatewash"
+                >
+                  Full report
+                </button>
+              </div>
+
+              <div className="max-h-56 space-y-3 overflow-y-auto px-4 py-3">
+                {debriefMessages.map((message, index) => (
+                  <div
+                    key={`${message.role}-${index}`}
+                    className={[
+                      'rounded-md px-3 py-2 text-sm leading-6',
+                      message.role === 'interviewer'
+                        ? 'bg-surface text-ink'
+                        : 'ml-auto max-w-[85%] bg-signal/15 text-signal',
+                    ].join(' ')}
+                  >
+                    {message.content}
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-white/10 p-3">
+                <div className="flex items-end gap-2">
+                  <textarea
+                    value={debriefQuestion}
+                    onChange={(event) => setDebriefQuestion(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        void handleDebriefFollowUp();
+                      }
+                    }}
+                    disabled={debriefState !== 'ready'}
+                    placeholder={
+                      debriefState === 'ready'
+                        ? 'Ask Alex about your score, mistakes, or what to practice next.'
+                        : 'Wait for Alex to finish speaking.'
+                    }
+                    rows={2}
+                    className="flex-1 resize-none rounded-md border border-white/15 bg-black/40 p-3 text-sm text-ink placeholder:text-graphite focus:border-signal focus:outline-none disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleDebriefFollowUp()}
+                    disabled={debriefState !== 'ready' || !debriefQuestion.trim()}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-signal px-4 text-sm font-semibold text-canvas shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {debriefState === 'answering' ? (
+                      <Loader2 className="animate-spin" size={16} aria-hidden="true" />
+                    ) : (
+                      <Send size={16} aria-hidden="true" />
+                    )}
+                    Ask
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showTypedFallback && !debriefReport && (
             <div className="absolute bottom-24 left-4 right-4 rounded-md border border-white/10 bg-surface/95 p-3 shadow-2xl backdrop-blur">
               <div className="flex items-end gap-2">
                 <textarea
@@ -422,8 +585,9 @@ export const InterviewRoomPage = () => {
             <button
               type="button"
               onClick={() => setShowTypedFallback((value) => !value)}
+              disabled={Boolean(debriefReport)}
               className={[
-                'inline-flex h-11 w-11 items-center justify-center rounded-full border transition',
+                'inline-flex h-11 w-11 items-center justify-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-40',
                 showTypedFallback
                   ? 'border-signal bg-signal/15 text-signal'
                   : 'border-white/10 bg-white/5 text-graphite hover:text-ink',
@@ -437,7 +601,7 @@ export const InterviewRoomPage = () => {
             <button
               type="button"
               onClick={() => void handleMicToggle()}
-              disabled={isProcessing}
+              disabled={isProcessing || Boolean(debriefReport)}
               aria-label={autoListenEnabled ? 'Mute microphone' : 'Unmute microphone'}
               title={autoListenEnabled ? 'Mute microphone' : 'Unmute microphone'}
               className={[
@@ -457,7 +621,7 @@ export const InterviewRoomPage = () => {
             <button
               type="button"
               onClick={handleEnd}
-              disabled={isEnding}
+              disabled={isEnding || Boolean(debriefReport)}
               className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-red-400/30 bg-red-400/15 text-red-200 transition hover:bg-red-400/25 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="End interview"
               title="End interview"

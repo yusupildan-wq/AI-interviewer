@@ -1,12 +1,15 @@
 import type {
   AuthResponse,
   CreateInterviewRequest,
+  FeedbackFollowUpRequest,
+  FeedbackFollowUpResponse,
   FeedbackReport,
   InterviewMode,
   InterviewSession,
   InterviewSessionSummary,
   LoginRequest,
   Problem,
+  ProgressOverview,
   SignupRequest,
   SubmitTurnRequest,
   SubmitTurnResponse,
@@ -98,6 +101,8 @@ export const listProblems = (mode?: InterviewMode): Promise<CandidateProblem[]> 
 export const listInterviewHistory = (): Promise<InterviewSessionSummary[]> =>
   request('/interviews');
 
+export const getProgressOverview = (): Promise<ProgressOverview> => request('/progress');
+
 export const createInterview = (body: CreateInterviewRequest): Promise<CandidateInterviewSession> =>
   request('/interviews', { method: 'POST', body: JSON.stringify(body) });
 
@@ -115,6 +120,15 @@ export const endInterview = (sessionId: string): Promise<CandidateInterviewSessi
 
 export const getFeedbackReport = (sessionId: string): Promise<FeedbackReport> =>
   request(`/interviews/${sessionId}/report`);
+
+export const askFeedbackFollowUp = (
+  sessionId: string,
+  body: FeedbackFollowUpRequest,
+): Promise<FeedbackFollowUpResponse> =>
+  request(`/interviews/${sessionId}/report/follow-up`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 
 export const transcribeAudio = async (audio: Blob): Promise<TranscribeAudioResponse> => {
   const response = await fetch(`${API_BASE_URL}/voice/transcribe`, {

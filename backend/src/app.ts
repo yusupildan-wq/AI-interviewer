@@ -8,6 +8,7 @@ import { authRouter } from './features/auth/auth.routes.js';
 import { healthRouter } from './features/health/health.routes.js';
 import { interviewSessionRouter } from './features/interview-session/interview-session.routes.js';
 import { profileRouter } from './features/profile/profile.routes.js';
+import { progressRouter } from './features/progress/progress.routes.js';
 import { problemsRouter } from './features/problems/problems.routes.js';
 import { voiceRouter } from './features/voice/voice.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -35,6 +36,7 @@ export const createApp = () => {
   app.use('/health', healthRouter);
   app.use('/auth', authRouter);
   app.use('/profile', profileRouter);
+  app.use('/progress', progressRouter);
   app.use('/problems', problemsRouter);
   app.use('/interviews', interviewSessionRouter);
   app.use('/voice', voiceRouter);

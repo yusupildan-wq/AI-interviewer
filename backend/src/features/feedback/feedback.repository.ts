@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '../../db/client.js';
 import { feedbackReports } from '../../db/schema.js';
+import { createFallbackCoachingIntelligence } from './coaching-intelligence.service.js';
 
 type FeedbackReportRow = typeof feedbackReports.$inferSelect;
 
@@ -16,6 +17,7 @@ const toFeedbackReport = (row: FeedbackReportRow): FeedbackReport => ({
   growthAreas: row.growthAreas,
   notableMoments: row.notableMoments,
   recommendation: row.recommendation,
+  coaching: row.coaching ?? createFallbackCoachingIntelligence(),
 });
 
 export const findCachedFeedbackReport = async (
@@ -37,6 +39,7 @@ export const saveFeedbackReport = async (report: FeedbackReport): Promise<void> 
     growthAreas: report.growthAreas,
     notableMoments: report.notableMoments,
     recommendation: report.recommendation,
+    coaching: report.coaching,
     generatedAt: new Date(report.generatedAt),
   };
 

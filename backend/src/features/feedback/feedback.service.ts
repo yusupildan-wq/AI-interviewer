@@ -5,6 +5,7 @@ import { env } from '../../config/env.js';
 import { HttpError } from '../../shared/http-error.js';
 import { getGroqClient } from '../llm/groq-client.js';
 import { computeOverallScore, deriveRecommendationFromScore } from '../scoring/scoring.service.js';
+import { buildCoachingIntelligence } from './coaching-intelligence.service.js';
 import { feedbackReportJsonSchema } from './feedback.schema.js';
 import { FEEDBACK_SYSTEM_PROMPT, buildFeedbackUserPrompt } from './feedback.prompt.js';
 
@@ -104,5 +105,96 @@ export const generateFeedbackReport = async (
     growthAreas: asStringArray(raw.growthAreas),
     notableMoments: asMoments(raw.notableMoments),
     recommendation,
+    coaching: buildCoachingIntelligence(session),
   };
+};
+
+export const answerFeedbackFollowUp = async (
+  session: InterviewSession,
+  report: FeedbackReport,
+  question: string,
+): Promise<string> => {
+  const trimmed = question.trim();
+  if (!trimmed) {
+    throw new HttpError(400, 'Question is required.');
+  }
+
+  const client = getGroqClient();
+  const transcript = session.transcript
+    .map((entry) => `[${entry.role}] ${entry.content}`)
+    .join('\n')
+    .slice(-8000);
+
+  try {
+    const response = await client.chat.completions.create({
+      model: env.decisionEngineModel,
+      max_completion_tokens: 900,
+      temperature: 0.35,
+      reasoning_effort: 'low',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are Alex, the same interviewer from the completed mock interview. Answer follow-up questions about the debrief directly, honestly, and conversationally. Be specific, concise, and coaching-oriented. Do not reopen the interview or ask a new interview question.',
+        },
+        {
+          role: 'user',
+          content: `## Interview
+Mode: ${session.mode}
+Problem: ${session.problem.title}
+
+## Report summary
+Score: ${report.overallScore}/100
+Recommendation: ${report.recommendation}
+Summary: ${report.summary}
+Strengths:
+${report.strengths.map((item) => `- ${item}`).join('\n')}
+Growth areas:
+${report.growthAreas.map((item) => `- ${item}`).join('\n')}
+Coaching drills:
+${report.coaching.nextDrills.map((item) => `- ${item}`).join('\n')}
+
+Rubric v2:
+- Communication: ${session.memory.rubricV2.communication}
+- Problem decomposition: ${session.memory.rubricV2.problemDecomposition}
+- Algorithmic correctness: ${session.memory.rubricV2.algorithmicCorrectness}
+- Complexity analysis: ${session.memory.rubricV2.complexityAnalysis}
+- Debugging ability: ${session.memory.rubricV2.debuggingAbility}
+- Testing discipline: ${session.memory.rubricV2.testingDiscipline}
+- Tradeoff reasoning: ${session.memory.rubricV2.tradeoffReasoning}
+- Interviewer collaboration: ${session.memory.rubricV2.interviewerCollaboration}
+
+Evidence:
+${
+  session.memory.evidence.length > 0
+    ? session.memory.evidence
+        .slice(-8)
+        .map(
+          (item) =>
+            `- ${item.severity} ${item.type}: "${item.transcriptQuote}" -> ${item.coachingNote}`,
+        )
+        .join('\n')
+    : '(no structured evidence captured)'
+}
+
+## Transcript excerpt
+${transcript || '(empty transcript)'}
+
+## Candidate follow-up question
+${trimmed}`,
+        },
+      ],
+    });
+
+    const answer = response.choices[0]?.message.content?.trim();
+    if (!answer) {
+      throw new HttpError(502, 'Follow-up answer returned no content.');
+    }
+    return answer;
+  } catch (caught) {
+    if (caught instanceof Groq.APIError) {
+      throw new HttpError(502, `Feedback follow-up failed (${caught.status}): ${caught.message}`);
+    }
+    throw caught;
+  }
 };

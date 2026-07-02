@@ -79,14 +79,63 @@ export interface ScoreRubric {
   confidence: number;
 }
 
+export interface RubricV2 {
+  communication: number;
+  problemDecomposition: number;
+  algorithmicCorrectness: number;
+  complexityAnalysis: number;
+  debuggingAbility: number;
+  testingDiscipline: number;
+  tradeoffReasoning: number;
+  interviewerCollaboration: number;
+}
+
+export type EvidenceType =
+  | 'requirement-clarification'
+  | 'approach-quality'
+  | 'complexity-analysis'
+  | 'edge-case-awareness'
+  | 'tradeoff-reasoning'
+  | 'testing-discipline'
+  | 'debugging-recovery'
+  | 'communication-signal'
+  | 'interviewer-pushback'
+  | 'unresolved-concern';
+
+export type EvidenceSeverity = 'positive' | 'neutral' | 'concern' | 'critical';
+
+export interface InterviewEvidenceEvent {
+  id: string;
+  type: EvidenceType;
+  severity: EvidenceSeverity;
+  transcriptQuote: string;
+  scoreImpact: Partial<RubricV2>;
+  coachingNote: string;
+  createdAt: string;
+}
+
+export interface InterviewMemory {
+  explainedConcepts: string[];
+  unresolvedConcerns: string[];
+  strengths: string[];
+  repeatedMistakes: string[];
+  nextBestProbe: string;
+  rubricV2: RubricV2;
+  evidence: InterviewEvidenceEvent[];
+  updatedAt: string;
+}
+
 export interface CandidateSignals {
   silenceMs: number;
   messageLength: number;
   hedgingPhraseCount: number;
   codeLinesChangedSinceLastTurn: number;
   rapidEditCount: number;
+  asksClarifyingQuestion: boolean;
   mentionsComplexity: boolean;
   mentionsEdgeCases: boolean;
+  mentionsTradeoffs: boolean;
+  mentionsTesting: boolean;
 }
 
 export interface InterviewerPersona {
@@ -103,6 +152,8 @@ export interface DecisionEngineInput {
   strictness: InterviewerStrictness;
   problem: Problem;
   persona: InterviewerPersona;
+  plan: InterviewPlan;
+  memory: InterviewMemory;
   transcript: TranscriptEntry[];
   currentCandidateMessage: string;
   currentCode?: string;
@@ -121,6 +172,38 @@ export interface DecisionEngineOutput {
 
 export type InterviewStatus = 'active' | 'completed';
 
+export type InterviewStage =
+  | 'opening'
+  | 'clarification'
+  | 'approach'
+  | 'implementation'
+  | 'deep-dive'
+  | 'edge-cases'
+  | 'wrap-up';
+
+export interface InterviewPlanCoverage {
+  requirements: boolean;
+  approach: boolean;
+  complexity: boolean;
+  edgeCases: boolean;
+  tradeoffs: boolean;
+  testing: boolean;
+}
+
+export interface InterviewPlan {
+  currentStage: InterviewStage;
+  primaryFocus: string;
+  targetRole: TargetRole;
+  seniority: SeniorityLevel;
+  preferredLanguage: CodingLanguage;
+  targetCompanies: string[];
+  weakAreas: string[];
+  milestones: string[];
+  coverage: InterviewPlanCoverage;
+  nextProbe: string;
+  updatedAt: string;
+}
+
 export interface InterviewSession {
   id: string;
   userId: string;
@@ -128,6 +211,8 @@ export interface InterviewSession {
   strictness: InterviewerStrictness;
   problem: Problem;
   persona: InterviewerPersona;
+  plan: InterviewPlan;
+  memory: InterviewMemory;
   status: InterviewStatus;
   transcript: TranscriptEntry[];
   codeHistory: CodeSnapshot[];
@@ -146,6 +231,26 @@ export interface FeedbackReportMoment {
   note: string;
 }
 
+export type CoachingCoverageKey = keyof InterviewPlanCoverage;
+
+export type CoachingCoverageStatus = 'covered' | 'partial' | 'missed';
+
+export interface CoachingCoverageItem {
+  key: CoachingCoverageKey;
+  label: string;
+  status: CoachingCoverageStatus;
+  note: string;
+}
+
+export interface CoachingIntelligence {
+  stageReached: InterviewStage;
+  primaryFocus: string;
+  coverage: CoachingCoverageItem[];
+  evidence: InterviewEvidenceEvent[];
+  nextProbe: string;
+  nextDrills: string[];
+}
+
 export interface FeedbackReport {
   sessionId: string;
   generatedAt: string;
@@ -156,6 +261,7 @@ export interface FeedbackReport {
   growthAreas: string[];
   notableMoments: FeedbackReportMoment[];
   recommendation: HireRecommendation;
+  coaching: CoachingIntelligence;
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +343,7 @@ export interface SubmitTurnResponse {
   interventionEntry?: TranscriptEntry;
   decision: DecisionEngineOutput;
   scores: ScoreRubric;
+  plan: InterviewPlan;
 }
 
 export interface TranscribeAudioResponse {
@@ -245,6 +352,14 @@ export interface TranscribeAudioResponse {
 
 export interface SynthesizeSpeechRequest {
   text: string;
+}
+
+export interface FeedbackFollowUpRequest {
+  question: string;
+}
+
+export interface FeedbackFollowUpResponse {
+  answer: string;
 }
 
 /** Lightweight row for interview history lists — avoids shipping full transcripts. */
@@ -257,4 +372,46 @@ export interface InterviewSessionSummary {
   scores: ScoreRubric;
   startedAt: string;
   endedAt?: string;
+}
+
+export interface ProgressTrendPoint {
+  sessionId: string;
+  date: string;
+  score: number;
+  problemTitle: string;
+}
+
+export interface ProgressWeakArea {
+  label: string;
+  count: number;
+  severity: EvidenceSeverity;
+  latestEvidence?: string;
+}
+
+export interface PracticePlanItem {
+  title: string;
+  detail: string;
+  source: string;
+}
+
+export interface RecentReportSummary {
+  sessionId: string;
+  problemTitle: string;
+  mode: InterviewMode;
+  completedAt: string;
+  overallScore: number;
+  recommendation: HireRecommendation;
+}
+
+export interface ProgressOverview {
+  completedCount: number;
+  activeCount: number;
+  averageScore: number;
+  bestScore: number;
+  latestScore?: number;
+  trend: ProgressTrendPoint[];
+  recentReports: RecentReportSummary[];
+  activeInterviews: InterviewSessionSummary[];
+  weakAreas: ProgressWeakArea[];
+  practicePlan: PracticePlanItem[];
 }

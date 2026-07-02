@@ -15,6 +15,8 @@ const pickSupportedMimeType = (): string | undefined =>
 type StartOptions = {
   autoStop?: boolean;
   onAutoStop?: (blob: Blob | undefined) => void;
+  onSpeechStart?: () => void;
+  speechThreshold?: number;
 };
 
 export function useVoiceRecorder() {
@@ -67,7 +69,10 @@ export function useVoiceRecorder() {
   }, [stopSilenceDetection]);
 
   const startSilenceDetection = useCallback(
-    (stream: MediaStream, onAutoStop?: (blob: Blob | undefined) => void) => {
+    (
+      stream: MediaStream,
+      options: Pick<StartOptions, 'onAutoStop' | 'onSpeechStart' | 'speechThreshold'>,
+    ) => {
       const context = new AudioContext();
       const analyser = context.createAnalyser();
       analyser.fftSize = 512;
@@ -80,6 +85,7 @@ export function useVoiceRecorder() {
       let hasHeardSpeech = false;
       let firstSpeechAt = 0;
       let lastSpeechAt = 0;
+      const speechThreshold = options.speechThreshold ?? SILENCE_THRESHOLD;
 
       sampleTimerRef.current = window.setInterval(() => {
         const data = sampleDataRef.current;
@@ -96,7 +102,10 @@ export function useVoiceRecorder() {
         const now = Date.now();
         const level = Math.sqrt(sumSquares / data.length);
 
-        if (level > SILENCE_THRESHOLD) {
+        if (level > speechThreshold) {
+          if (!hasHeardSpeech) {
+            options.onSpeechStart?.();
+          }
           hasHeardSpeech = true;
           firstSpeechAt = firstSpeechAt || now;
           lastSpeechAt = now;
@@ -110,7 +119,7 @@ export function useVoiceRecorder() {
         const maxDurationExpired = now - firstSpeechAt >= MAX_SPEECH_MS;
 
         if ((hasMinimumSpeech && silenceExpired) || maxDurationExpired) {
-          void stop().then(onAutoStop);
+          void stop().then(options.onAutoStop);
         }
       }, SAMPLE_INTERVAL_MS);
     },
@@ -129,7 +138,13 @@ export function useVoiceRecorder() {
 
       setError(undefined);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
 
         // Another start() call may have won the race while we were awaiting
         // permission — if so, back off and let that session own the mic.
@@ -154,7 +169,7 @@ export function useVoiceRecorder() {
         setIsRecording(true);
 
         if (options.autoStop) {
-          startSilenceDetection(stream, options.onAutoStop);
+          startSilenceDetection(stream, options);
         }
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : 'Microphone access was denied.');
