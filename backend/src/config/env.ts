@@ -18,6 +18,20 @@ const parsePort = (value: string | undefined): number => {
   return port;
 };
 
+const parsePositiveInteger = (value: string | undefined, fallback: number): number => {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`Invalid positive integer value: ${value}`);
+  }
+
+  return parsed;
+};
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parsePort(process.env.PORT),
@@ -25,8 +39,12 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL,
   groqApiKey: process.env.GROQ_API_KEY,
   openaiApiKey: process.env.OPENAI_API_KEY,
-  decisionEngineModel: process.env.DECISION_ENGINE_MODEL ?? 'openai/gpt-oss-20b',
-  decisionEngineReasoningEffort: process.env.DECISION_ENGINE_REASONING_EFFORT ?? 'low',
+  // Runs on OpenAI (same key as text-to-speech below) rather than Groq's free tier —
+  // Groq's shared 8000 TPM/minute cap throttled after 1-2 real conversational turns and
+  // fell back to a generic reply; OpenAI held up over 5 rapid-fire requests in testing.
+  decisionEngineModel: process.env.DECISION_ENGINE_MODEL ?? 'gpt-4o-mini',
+  // Safety net only, in case the model call genuinely hangs — not a routine truncation.
+  decisionEngineTimeoutMs: parsePositiveInteger(process.env.DECISION_ENGINE_TIMEOUT_MS, 10000),
   speechToTextModel: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
   voiceProvider: process.env.VOICE_PROVIDER ?? 'openai',
   openaiTextToSpeechModel: process.env.OPENAI_TTS_MODEL ?? 'gpt-4o-mini-tts',

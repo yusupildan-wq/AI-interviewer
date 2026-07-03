@@ -1,10 +1,13 @@
 import type { FeedbackReport, HireRecommendation, InterviewSession } from '@ai-interviewer/shared';
-import Groq from 'groq-sdk';
 
 import { env } from '../../config/env.js';
 import { HttpError } from '../../shared/http-error.js';
-import { getGroqClient } from '../llm/groq-client.js';
-import { computeOverallScore, deriveRecommendationFromScore } from '../scoring/scoring.service.js';
+import { createChatCompletion, createStructuredChatCompletion } from '../llm/openai-client.js';
+import {
+  calibrateFinalScores,
+  computeOverallScore,
+  deriveRecommendationFromScore,
+} from '../scoring/scoring.service.js';
 import { buildCoachingIntelligence } from './coaching-intelligence.service.js';
 import { feedbackReportJsonSchema } from './feedback.schema.js';
 import { FEEDBACK_SYSTEM_PROMPT, buildFeedbackUserPrompt } from './feedback.prompt.js';
@@ -44,45 +47,21 @@ const asMoments = (value: unknown): FeedbackReport['notableMoments'] => {
 export const generateFeedbackReport = async (
   session: InterviewSession,
 ): Promise<FeedbackReport> => {
-  const client = getGroqClient();
-  const overallScore = computeOverallScore(session.scores);
+  const calibratedScores = calibrateFinalScores(session);
+  const calibratedSession: InterviewSession = { ...session, scores: calibratedScores };
+  const overallScore = computeOverallScore(calibratedScores);
 
-  let response;
-  try {
-    response = await client.chat.completions.create({
-      model: env.decisionEngineModel,
-      // Reasoning tokens count against this budget before the JSON answer is emitted, and
-      // a too-tight limit causes the model to run out of room and return an empty/invalid
-      // completion (Groq error code json_validate_failed). Kept well under the account's
-      // 8000 TPM cap alongside the full-transcript prompt this call sends — see
-      // reasoning_effort below, which is the main lever for keeping reasoning-token usage
-      // predictable ("high" reliably blows the TPM budget on a prompt this size).
-      max_completion_tokens: 4096,
-      temperature: 0.4,
-      reasoning_effort: 'medium',
-      response_format: {
-        type: 'json_schema',
-        json_schema: { name: 'feedback_report', schema: feedbackReportJsonSchema, strict: true },
-      },
-      messages: [
-        { role: 'system', content: FEEDBACK_SYSTEM_PROMPT },
-        { role: 'user', content: buildFeedbackUserPrompt(session) },
-      ],
-    });
-  } catch (caught) {
-    if (caught instanceof Groq.APIError) {
-      throw new HttpError(
-        502,
-        `Feedback report generation failed (${caught.status}): ${caught.message}`,
-      );
-    }
-    throw caught;
-  }
-
-  const content = response.choices[0]?.message.content;
-  if (!content) {
-    throw new HttpError(502, 'Feedback report generation returned no content.');
-  }
+  const content = await createStructuredChatCompletion({
+    model: env.decisionEngineModel,
+    maxCompletionTokens: 1500,
+    temperature: 0.4,
+    jsonSchemaName: 'feedback_report',
+    jsonSchema: feedbackReportJsonSchema,
+    messages: [
+      { role: 'system', content: FEEDBACK_SYSTEM_PROMPT },
+      { role: 'user', content: buildFeedbackUserPrompt(calibratedSession) },
+    ],
+  });
 
   let raw: RawFeedback;
   try {
@@ -99,13 +78,13 @@ export const generateFeedbackReport = async (
     sessionId: session.id,
     generatedAt: new Date().toISOString(),
     overallScore,
-    scores: session.scores,
+    scores: calibratedScores,
     summary: typeof raw.summary === 'string' ? raw.summary : '',
     strengths: asStringArray(raw.strengths),
     growthAreas: asStringArray(raw.growthAreas),
     notableMoments: asMoments(raw.notableMoments),
     recommendation,
-    coaching: buildCoachingIntelligence(session),
+    coaching: buildCoachingIntelligence(calibratedSession),
   };
 };
 
@@ -119,18 +98,16 @@ export const answerFeedbackFollowUp = async (
     throw new HttpError(400, 'Question is required.');
   }
 
-  const client = getGroqClient();
   const transcript = session.transcript
     .map((entry) => `[${entry.role}] ${entry.content}`)
     .join('\n')
     .slice(-8000);
 
-  try {
-    const response = await client.chat.completions.create({
+  const answer = (
+    await createChatCompletion({
       model: env.decisionEngineModel,
-      max_completion_tokens: 900,
+      maxCompletionTokens: 500,
       temperature: 0.35,
-      reasoning_effort: 'low',
       messages: [
         {
           role: 'system',
@@ -184,17 +161,11 @@ ${transcript || '(empty transcript)'}
 ${trimmed}`,
         },
       ],
-    });
+    })
+  ).trim();
 
-    const answer = response.choices[0]?.message.content?.trim();
-    if (!answer) {
-      throw new HttpError(502, 'Follow-up answer returned no content.');
-    }
-    return answer;
-  } catch (caught) {
-    if (caught instanceof Groq.APIError) {
-      throw new HttpError(502, `Feedback follow-up failed (${caught.status}): ${caught.message}`);
-    }
-    throw caught;
+  if (!answer) {
+    throw new HttpError(502, 'Follow-up answer returned no content.');
   }
+  return answer;
 };

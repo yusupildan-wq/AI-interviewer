@@ -1,5 +1,5 @@
 import type { InterviewSession, InterviewSessionSummary } from '@ai-interviewer/shared';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 import { db } from '../../db/client.js';
 import { interviewSessions } from '../../db/schema.js';
@@ -11,6 +11,8 @@ export interface SessionRepository {
   create(session: InterviewSession): Promise<InterviewSession>;
   findById(id: string): Promise<InterviewSession | undefined>;
   save(session: InterviewSession): Promise<InterviewSession>;
+  deleteByIdForUser(id: string, userId: string): Promise<boolean>;
+  deleteAllForUser(userId: string): Promise<number>;
   listByUser(userId: string): Promise<InterviewSessionSummary[]>;
 }
 
@@ -91,6 +93,24 @@ class PostgresSessionRepository implements SessionRepository {
       .where(eq(interviewSessions.id, session.id));
 
     return session;
+  }
+
+  async deleteByIdForUser(id: string, userId: string): Promise<boolean> {
+    const deleted = await db
+      .delete(interviewSessions)
+      .where(and(eq(interviewSessions.id, id), eq(interviewSessions.userId, userId)))
+      .returning({ id: interviewSessions.id });
+
+    return deleted.length > 0;
+  }
+
+  async deleteAllForUser(userId: string): Promise<number> {
+    const deleted = await db
+      .delete(interviewSessions)
+      .where(eq(interviewSessions.userId, userId))
+      .returning({ id: interviewSessions.id });
+
+    return deleted.length;
   }
 
   async listByUser(userId: string): Promise<InterviewSessionSummary[]> {

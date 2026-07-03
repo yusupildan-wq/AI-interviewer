@@ -2,7 +2,6 @@ import type {
   FeedbackReport,
   InterviewMode,
   InterviewStage,
-  InterviewerStrictness,
   ScoreRubric,
   TranscriptEntry,
 } from '@ai-interviewer/shared';
@@ -25,6 +24,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { useAudioPlayer } from '../../hooks/useAudioPlayer';
+import { useLiveSpeechRecognition } from '../../hooks/useLiveSpeechRecognition';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import {
   ApiError,
@@ -51,21 +51,14 @@ const MODE_LABEL: Record<InterviewMode, string> = {
   'resume-deep-dive': 'Resume deep dive',
 };
 
-const STRICTNESS_LABEL: Record<InterviewerStrictness, string> = {
-  'coffee-chat': 'Coffee chat',
-  standard: 'Standard',
-  strict: 'Strict',
-};
-
 type SidePanel = 'problem' | 'code' | 'transcript' | 'score';
 type DebriefState = 'idle' | 'generating' | 'speaking' | 'ready' | 'answering';
 type DebriefMessage = { role: 'candidate' | 'interviewer'; content: string };
+type TurnPhase = 'idle' | 'transcribing' | 'thinking';
 
-const formatElapsed = (startedAt: string): string => {
-  const elapsedSeconds = Math.max(
-    0,
-    Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000),
-  );
+const formatElapsed = (startedAt: string, endedAt?: string): string => {
+  const endTime = endedAt ? new Date(endedAt).getTime() : Date.now();
+  const elapsedSeconds = Math.max(0, Math.floor((endTime - new Date(startedAt).getTime()) / 1000));
   const minutes = Math.floor(elapsedSeconds / 60)
     .toString()
     .padStart(2, '0');
@@ -83,9 +76,11 @@ const STAGE_LABEL: Record<InterviewStage, string> = {
   'wrap-up': 'Wrap-up',
 };
 
-const interviewerStatus = (state: AvatarState): string => {
+const interviewerStatus = (state: AvatarState, phase: TurnPhase): string => {
+  if (phase === 'thinking') return 'Listening';
+  if (phase === 'transcribing') return 'Listening';
   if (state === 'listening') return 'Listening';
-  if (state === 'thinking') return 'Reviewing';
+  if (state === 'thinking') return 'Ready';
   if (state === 'speaking') return 'Speaking';
   return 'Ready';
 };
@@ -126,7 +121,7 @@ export const InterviewRoomPage = () => {
   const [elapsed, setElapsed] = useState('00:00');
   const [activePanel, setActivePanel] = useState<SidePanel | undefined>();
   const [isLoading, setIsLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [turnPhase, setTurnPhase] = useState<TurnPhase>('idle');
   const [isEnding, setIsEnding] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [autoListenEnabled, setAutoListenEnabled] = useState(true);
@@ -137,8 +132,10 @@ export const InterviewRoomPage = () => {
 
   const [showTypedFallback, setShowTypedFallback] = useState(false);
   const [typedMessage, setTypedMessage] = useState('');
+  const [queuedTurn, setQueuedTurn] = useState<string | undefined>();
 
   const recorder = useVoiceRecorder();
+  const liveSpeech = useLiveSpeechRecognition();
   const player = useAudioPlayer();
   const isSpeaking = player.isSpeaking;
 
@@ -151,7 +148,11 @@ export const InterviewRoomPage = () => {
         setSession(loaded);
         setTranscript(loaded.transcript);
         setScores(loaded.scores);
-        setElapsed(formatElapsed(loaded.startedAt));
+        setElapsed(formatElapsed(loaded.startedAt, loaded.endedAt));
+        if (loaded.status === 'completed') {
+          setAutoListenEnabled(false);
+          setIsEnding(false);
+        }
         setIsLoading(false);
       })
       .catch((caught) => {
@@ -166,20 +167,51 @@ export const InterviewRoomPage = () => {
 
   useEffect(() => {
     if (!session) return;
-    const timer = window.setInterval(() => setElapsed(formatElapsed(session.startedAt)), 1000);
+    setElapsed(formatElapsed(session.startedAt, session.endedAt));
+    if (session.status === 'completed') return;
+    const timer = window.setInterval(
+      () => setElapsed(formatElapsed(session.startedAt, session.endedAt)),
+      1000,
+    );
     return () => window.clearInterval(timer);
   }, [session]);
 
   const isCoding = session?.mode === 'coding';
+  const isCompleted = session?.status === 'completed';
   const isDebriefLocked =
     debriefState === 'generating' || debriefState === 'speaking' || debriefState === 'answering';
+  const isProcessing = turnPhase !== 'idle';
   const isBusy = isProcessing || isDebriefLocked;
+
+  const queueCandidateTurn = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setQueuedTurn((previous) => (previous ? `${previous}\n${trimmed}` : trimmed));
+  }, []);
+
+  const playInterviewerSpeech = useCallback(
+    async (text: string, unavailableMessage: string) => {
+      try {
+        const audioBlob = await synthesizeSpeech(text);
+        await player.play(audioBlob);
+      } catch (caught) {
+        // Real TTS failed outright (not just slow) — browser speech synthesis is a
+        // last-resort fallback so the interviewer still says something audible.
+        try {
+          await player.speakText(text);
+        } catch {
+          setError(caught instanceof ApiError ? caught.message : unavailableMessage);
+        }
+      }
+    },
+    [player],
+  );
 
   const sendTurn = useCallback(
     async (text: string) => {
       if (!sessionId) return;
       player.stop();
-      setIsProcessing(true);
+      setTurnPhase('thinking');
 
       try {
         const result = await submitTurn(sessionId, {
@@ -196,19 +228,13 @@ export const InterviewRoomPage = () => {
         });
         setScores(result.scores);
         setSession((previous) => (previous ? { ...previous, plan: result.plan } : previous));
-        setIsProcessing(false);
+        setTurnPhase('idle');
 
         if (result.interventionEntry?.content) {
-          try {
-            const audioBlob = await synthesizeSpeech(result.interventionEntry.content);
-            await player.play(audioBlob);
-          } catch (caught) {
-            setError(
-              caught instanceof ApiError
-                ? caught.message
-                : 'High-quality interviewer voice is unavailable.',
-            );
-          }
+          await playInterviewerSpeech(
+            result.interventionEntry.content,
+            'High-quality interviewer voice is unavailable.',
+          );
         }
       } catch (caught) {
         setError(
@@ -224,23 +250,42 @@ export const InterviewRoomPage = () => {
           // The visible error above is enough context for the candidate.
         }
       } finally {
-        setIsProcessing(false);
+        setTurnPhase('idle');
       }
     },
-    [code, isCoding, player, sessionId],
+    [code, isCoding, playInterviewerSpeech, player, sessionId],
   );
+
+  useEffect(() => {
+    if (!queuedTurn || isProcessing || isDebriefLocked || debriefReport || isCompleted) {
+      return;
+    }
+
+    const nextTurn = queuedTurn;
+    setQueuedTurn(undefined);
+    void sendTurn(nextTurn);
+  }, [debriefReport, isCompleted, isDebriefLocked, isProcessing, queuedTurn, sendTurn]);
 
   const handleVoiceBlob = useCallback(
     async (blob: Blob | undefined) => {
-      if (!blob || isProcessing || isDebriefLocked || debriefReport) return;
+      if (!blob || isDebriefLocked || debriefReport) return;
 
-      setIsProcessing(true);
+      const shouldQueue = isProcessing;
+      if (!shouldQueue) {
+        setTurnPhase('transcribing');
+      }
       setError(undefined);
       try {
         const { text } = await transcribeAudio(blob);
         if (!text.trim()) {
           setError("Didn't catch that. Try again.");
-          setIsProcessing(false);
+          if (!shouldQueue) {
+            setTurnPhase('idle');
+          }
+          return;
+        }
+        if (shouldQueue) {
+          queueCandidateTurn(text);
           return;
         }
         await sendTurn(text);
@@ -248,42 +293,74 @@ export const InterviewRoomPage = () => {
         setError(
           caught instanceof ApiError ? caught.message : 'Could not transcribe that. Try again.',
         );
-        setIsProcessing(false);
+        if (!shouldQueue) {
+          setTurnPhase('idle');
+        }
       }
     },
-    [debriefReport, isDebriefLocked, isProcessing, sendTurn],
+    [debriefReport, isDebriefLocked, isProcessing, queueCandidateTurn, sendTurn],
+  );
+
+  const handleLiveSpeechText = useCallback(
+    async (text: string) => {
+      if (isDebriefLocked || debriefReport) return;
+      if (isProcessing) {
+        queueCandidateTurn(text);
+        return;
+      }
+      setError(undefined);
+      await sendTurn(text);
+    },
+    [debriefReport, isDebriefLocked, isProcessing, queueCandidateTurn, sendTurn],
   );
 
   useEffect(() => {
+    // isSpeaking is a hard gate, not just a signal-tuning tweak: the mic must never be
+    // active while the interviewer's own voice is playing, or an echo of that voice
+    // (or background noise) can get misread as the candidate interrupting and cut the
+    // interviewer off mid-sentence. Listening only resumes once playback fully ends.
     if (
       !session ||
+      isCompleted ||
       !autoListenEnabled ||
       showTypedFallback ||
       isProcessing ||
+      isSpeaking ||
       isEnding ||
       isDebriefLocked ||
       debriefReport ||
       recorder.isRecording ||
+      liveSpeech.isListening ||
       recorder.error
     ) {
+      return;
+    }
+
+    if (liveSpeech.isSupported) {
+      liveSpeech.start({
+        onFinalTranscript: (text) => {
+          void handleLiveSpeechText(text);
+        },
+      });
       return;
     }
 
     void recorder.start({
       autoStop: true,
       onAutoStop: handleVoiceBlob,
-      onSpeechStart: isSpeaking ? player.stop : undefined,
-      speechThreshold: isSpeaking ? 0.055 : undefined,
     });
   }, [
     autoListenEnabled,
     debriefReport,
     handleVoiceBlob,
+    handleLiveSpeechText,
+    isCompleted,
     isDebriefLocked,
     isEnding,
     isProcessing,
     isSpeaking,
-    player.stop,
+    liveSpeech.isListening,
+    liveSpeech,
     recorder,
     session,
     showTypedFallback,
@@ -293,6 +370,7 @@ export const InterviewRoomPage = () => {
     setError(undefined);
     if (autoListenEnabled || recorder.isRecording) {
       setAutoListenEnabled(false);
+      liveSpeech.stop();
       if (recorder.isRecording) {
         await recorder.stop();
       }
@@ -310,17 +388,19 @@ export const InterviewRoomPage = () => {
   };
 
   const handleEnd = async () => {
-    if (!sessionId || isEnding) return;
+    if (!sessionId || isEnding || isCompleted) return;
     setIsEnding(true);
     setDebriefState('generating');
     setAutoListenEnabled(false);
     player.stop();
     try {
+      liveSpeech.stop();
       if (recorder.isRecording) {
         await recorder.stop();
       }
       const completed = await endInterview(sessionId);
       setSession(completed);
+      setElapsed(formatElapsed(completed.startedAt, completed.endedAt));
       const report = await getFeedbackReport(sessionId);
       setDebriefReport(report);
       const spokenDebrief = buildSpokenDebrief(report);
@@ -328,8 +408,7 @@ export const InterviewRoomPage = () => {
 
       try {
         setDebriefState('speaking');
-        const audioBlob = await synthesizeSpeech(spokenDebrief);
-        await player.play(audioBlob);
+        await playInterviewerSpeech(spokenDebrief, 'Could not play the spoken debrief.');
       } catch (caught) {
         setError(
           caught instanceof ApiError ? caught.message : 'Could not play the spoken debrief.',
@@ -356,14 +435,7 @@ export const InterviewRoomPage = () => {
     try {
       const { answer } = await askFeedbackFollowUp(sessionId, { question });
       setDebriefMessages((previous) => [...previous, { role: 'interviewer', content: answer }]);
-      try {
-        const audioBlob = await synthesizeSpeech(answer);
-        await player.play(audioBlob);
-      } catch (caught) {
-        setError(
-          caught instanceof ApiError ? caught.message : 'Could not play the follow-up answer.',
-        );
-      }
+      await playInterviewerSpeech(answer, 'Could not play the follow-up answer.');
     } catch (caught) {
       setError(
         caught instanceof ApiError ? caught.message : 'Could not answer that follow-up question.',
@@ -375,13 +447,15 @@ export const InterviewRoomPage = () => {
 
   const avatarState: AvatarState = recorder.isRecording
     ? 'listening'
-    : isSpeaking
-      ? 'speaking'
-      : isProcessing || debriefState === 'generating' || debriefState === 'answering'
-        ? 'thinking'
-        : 'idle';
+    : liveSpeech.isListening
+      ? 'listening'
+      : isSpeaking
+        ? 'speaking'
+        : debriefState === 'generating' || debriefState === 'answering'
+          ? 'thinking'
+          : 'idle';
 
-  const combinedError = error ?? recorder.error;
+  const combinedError = error ?? liveSpeech.error ?? recorder.error;
   const latestPrompt = latestInterviewerMessage(transcript);
 
   if (isLoading) {
@@ -409,7 +483,7 @@ export const InterviewRoomPage = () => {
     { id: 'problem', label: 'Problem', icon: BookOpenText },
     { id: 'code', label: 'Code', icon: Code2, disabled: !isCoding },
     { id: 'transcript', label: 'Transcript', icon: MessageSquareText },
-    { id: 'score', label: 'Read', icon: Activity },
+    { id: 'score', label: 'Live read', icon: Activity },
   ];
 
   return (
@@ -418,17 +492,16 @@ export const InterviewRoomPage = () => {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-signal/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-signal">
-              Live interview
+              {isCompleted ? 'Completed interview' : 'Live interview'}
             </span>
             <span className="rounded-full bg-slatewash px-2.5 py-1 text-[11px] font-semibold text-graphite">
               {MODE_LABEL[session.mode]}
             </span>
-            <span className="rounded-full bg-amberline/10 px-2.5 py-1 text-[11px] font-semibold text-amberline">
-              {STRICTNESS_LABEL[session.strictness]}
-            </span>
-            <span className="rounded-full bg-slatewash px-2.5 py-1 text-[11px] font-semibold text-graphite">
-              {STAGE_LABEL[session.plan.currentStage]}
-            </span>
+            {!isCompleted && (
+              <span className="rounded-full bg-slatewash px-2.5 py-1 text-[11px] font-semibold text-graphite">
+                {STAGE_LABEL[session.plan.currentStage]}
+              </span>
+            )}
           </div>
         </div>
 
@@ -438,8 +511,12 @@ export const InterviewRoomPage = () => {
             <span className="font-mono">{elapsed}</span>
           </div>
           <div className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-canvas px-3 py-2 text-graphite">
-            <span className="h-2 w-2 rounded-full bg-signal" />
-            {interviewerStatus(avatarState)}
+            <span
+              className={['h-2 w-2 rounded-full', isCompleted ? 'bg-graphite' : 'bg-signal'].join(
+                ' ',
+              )}
+            />
+            {isCompleted ? 'Ended' : interviewerStatus(avatarState, turnPhase)}
           </div>
         </div>
       </div>
@@ -461,10 +538,10 @@ export const InterviewRoomPage = () => {
             <p className="mt-1 line-clamp-2 text-sm text-graphite">{session.plan.primaryFocus}</p>
           </div>
 
-          {latestPrompt && (
-            <div className="pointer-events-none absolute bottom-24 left-4 max-w-[420px] rounded-md border border-white/10 bg-canvas/70 px-3 py-2 shadow-2xl backdrop-blur">
+          {latestPrompt && !debriefReport && !isCompleted && (
+            <div className="pointer-events-none absolute bottom-24 left-4 max-w-[340px] rounded-md border border-white/10 bg-canvas/55 px-3 py-2 shadow-2xl backdrop-blur">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-signal">
-                Latest from Alex
+                Alex
               </p>
               <p className="mt-1 line-clamp-2 text-xs leading-5 text-ink">{latestPrompt.content}</p>
             </div>
@@ -552,7 +629,7 @@ export const InterviewRoomPage = () => {
             </div>
           )}
 
-          {showTypedFallback && !debriefReport && (
+          {showTypedFallback && !debriefReport && !isCompleted && (
             <div className="absolute bottom-24 left-4 right-4 rounded-md border border-white/10 bg-surface/95 p-3 shadow-2xl backdrop-blur">
               <div className="flex items-end gap-2">
                 <textarea
@@ -582,56 +659,76 @@ export const InterviewRoomPage = () => {
           )}
 
           <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-canvas/80 px-4 py-3 shadow-2xl backdrop-blur">
-            <button
-              type="button"
-              onClick={() => setShowTypedFallback((value) => !value)}
-              disabled={Boolean(debriefReport)}
-              className={[
-                'inline-flex h-11 w-11 items-center justify-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-40',
-                showTypedFallback
-                  ? 'border-signal bg-signal/15 text-signal'
-                  : 'border-white/10 bg-white/5 text-graphite hover:text-ink',
-              ].join(' ')}
-              aria-label={showTypedFallback ? 'Hide typing fallback' : 'Type instead'}
-              title={showTypedFallback ? 'Hide typing fallback' : 'Type instead'}
-            >
-              <Keyboard size={18} aria-hidden="true" />
-            </button>
+            {isCompleted ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/interview/${session.id}/report`)}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-signal px-5 text-sm font-semibold text-canvas shadow-glow transition hover:brightness-110"
+                >
+                  <BookOpenText size={17} aria-hidden="true" />
+                  Report
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard')}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 bg-white/5 px-5 text-sm font-semibold text-ink transition hover:bg-slatewash"
+                >
+                  Dashboard
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowTypedFallback((value) => !value)}
+                  disabled={Boolean(debriefReport)}
+                  className={[
+                    'inline-flex h-11 w-11 items-center justify-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-40',
+                    showTypedFallback
+                      ? 'border-signal bg-signal/15 text-signal'
+                      : 'border-white/10 bg-white/5 text-graphite hover:text-ink',
+                  ].join(' ')}
+                  aria-label={showTypedFallback ? 'Hide typing fallback' : 'Type instead'}
+                  title={showTypedFallback ? 'Hide typing fallback' : 'Type instead'}
+                >
+                  <Keyboard size={18} aria-hidden="true" />
+                </button>
 
-            <button
-              type="button"
-              onClick={() => void handleMicToggle()}
-              disabled={isProcessing || Boolean(debriefReport)}
-              aria-label={autoListenEnabled ? 'Mute microphone' : 'Unmute microphone'}
-              title={autoListenEnabled ? 'Mute microphone' : 'Unmute microphone'}
-              className={[
-                'inline-flex h-14 w-14 items-center justify-center rounded-full text-canvas shadow-glow transition disabled:cursor-not-allowed disabled:opacity-50',
-                autoListenEnabled ? 'bg-signal hover:brightness-110' : 'bg-red-400',
-              ].join(' ')}
-            >
-              {isProcessing ? (
-                <Loader2 className="animate-spin" size={24} aria-hidden="true" />
-              ) : autoListenEnabled ? (
-                <Mic size={24} aria-hidden="true" />
-              ) : (
-                <MicOff size={24} aria-hidden="true" />
-              )}
-            </button>
+                <button
+                  type="button"
+                  onClick={() => void handleMicToggle()}
+                  disabled={Boolean(debriefReport)}
+                  aria-label={autoListenEnabled ? 'Mute microphone' : 'Unmute microphone'}
+                  title={autoListenEnabled ? 'Mute microphone' : 'Unmute microphone'}
+                  className={[
+                    'inline-flex h-14 w-14 items-center justify-center rounded-full text-canvas shadow-glow transition disabled:cursor-not-allowed disabled:opacity-50',
+                    autoListenEnabled ? 'bg-signal hover:brightness-110' : 'bg-red-400',
+                  ].join(' ')}
+                >
+                  {autoListenEnabled ? (
+                    <Mic size={24} aria-hidden="true" />
+                  ) : (
+                    <MicOff size={24} aria-hidden="true" />
+                  )}
+                </button>
 
-            <button
-              type="button"
-              onClick={handleEnd}
-              disabled={isEnding || Boolean(debriefReport)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-red-400/30 bg-red-400/15 text-red-200 transition hover:bg-red-400/25 disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label="End interview"
-              title="End interview"
-            >
-              {isEnding ? (
-                <Loader2 className="animate-spin" size={18} aria-hidden="true" />
-              ) : (
-                <PhoneOff size={18} aria-hidden="true" />
-              )}
-            </button>
+                <button
+                  type="button"
+                  onClick={handleEnd}
+                  disabled={isEnding || Boolean(debriefReport)}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-red-400/30 bg-red-400/15 text-red-200 transition hover:bg-red-400/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="End interview"
+                  title="End interview"
+                >
+                  {isEnding ? (
+                    <Loader2 className="animate-spin" size={18} aria-hidden="true" />
+                  ) : (
+                    <PhoneOff size={18} aria-hidden="true" />
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -700,15 +797,16 @@ export const InterviewRoomPage = () => {
               type="button"
               onClick={() => setActivePanel(isActive ? undefined : item.id)}
               disabled={item.disabled}
+              aria-label={item.label}
+              title={item.label}
               className={[
-                'inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40',
+                'inline-flex h-10 w-10 items-center justify-center rounded-md text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40',
                 isActive
                   ? 'bg-signal text-canvas'
                   : 'bg-canvas text-graphite hover:bg-slatewash hover:text-ink',
               ].join(' ')}
             >
               <Icon size={17} aria-hidden="true" />
-              <span className="hidden sm:inline">{item.label}</span>
             </button>
           );
         })}
@@ -718,7 +816,15 @@ export const InterviewRoomPage = () => {
           ) : (
             <MicOff size={13} aria-hidden="true" />
           )}
-          {autoListenEnabled ? (recorder.isRecording ? 'Listening' : 'Auto mic') : 'Muted'}
+          {isCompleted
+            ? 'Ended'
+            : autoListenEnabled
+              ? recorder.isRecording || liveSpeech.isListening
+                ? 'Listening'
+                : liveSpeech.isSupported
+                  ? 'Live mic'
+                  : 'Auto mic'
+              : 'Muted'}
         </div>
       </div>
     </section>

@@ -1,8 +1,10 @@
 import type {
   CandidateSignals,
+  InterviewMemory,
   InterviewMode,
   InterviewPlan,
   InterviewStage,
+  SkillEstimate,
   TranscriptEntry,
   UserProfile,
 } from '@ai-interviewer/shared';
@@ -95,9 +97,28 @@ export const createInterviewPlan = (mode: InterviewMode, profile?: UserProfile):
       tradeoffs: false,
       testing: false,
     },
+    skillEstimate: 'on-track',
     nextProbe: initialProbeForMode(mode),
     updatedAt: new Date().toISOString(),
   };
+};
+
+/** Cheap, deterministic read on how the candidate is doing so far — no LLM call needed.
+ * Based on the qualitative signals already accumulated in memory (not raw rubric scores,
+ * which are clamped at a 0 floor and can't distinguish "struggling" from "no signal yet"). */
+const estimateSkill = (
+  memory: Pick<InterviewMemory, 'strengths' | 'unresolvedConcerns' | 'repeatedMistakes'>,
+): SkillEstimate => {
+  const positiveSignal = memory.strengths.length;
+  const negativeSignal = memory.unresolvedConcerns.length + memory.repeatedMistakes.length;
+
+  if (memory.repeatedMistakes.length >= 2 || negativeSignal - positiveSignal >= 2) {
+    return 'building-confidence';
+  }
+  if (positiveSignal - negativeSignal >= 3) {
+    return 'strong';
+  }
+  return 'on-track';
 };
 
 const hasCandidateTurns = (transcript: TranscriptEntry[]): boolean =>
@@ -117,10 +138,21 @@ const inferStage = (
   if (!hasCandidateTurns(transcript)) return 'opening';
   if (!coverage.requirements && candidateTurns <= 2) return 'clarification';
   if (!coverage.approach && candidateTurns <= 3) return 'approach';
+
+  // Checked before the mode-specific branches below, which would otherwise always
+  // claim coding (once code exists) and system-design (once approach is covered)
+  // interviews permanently, making "wrap-up" structurally unreachable for either.
+  const substantiallyCovered =
+    coverage.approach &&
+    coverage.edgeCases &&
+    (mode !== 'coding' || coverage.testing) &&
+    (mode === 'behavioral' || coverage.tradeoffs || coverage.complexity);
+  if (substantiallyCovered && candidateTurns >= 5) return 'wrap-up';
+  if (candidateTurns >= 9) return 'wrap-up';
+
   if (mode === 'coding' && hasCode) return coverage.edgeCases ? 'deep-dive' : 'implementation';
   if (mode === 'system-design' && coverage.approach)
     return coverage.tradeoffs ? 'deep-dive' : 'approach';
-  if (candidateTurns >= 7) return 'wrap-up';
   return coverage.edgeCases || coverage.tradeoffs ? 'deep-dive' : 'approach';
 };
 
@@ -138,7 +170,8 @@ const chooseNextProbe = (
   if (!coverage.edgeCases) return 'Probe edge cases or failure modes tied to the candidate answer.';
   if (!coverage.testing && mode === 'coding')
     return 'Ask how they would test or dry-run the solution.';
-  if (stage === 'wrap-up') return 'Summarize one remaining gap and transition toward completion.';
+  if (stage === 'wrap-up')
+    return 'Ask them to trace through the solution with one concrete example, then ask if they have any questions for you.';
   return 'Deepen the most specific claim the candidate just made.';
 };
 
@@ -148,6 +181,7 @@ export const updateInterviewPlan = (
   transcript: TranscriptEntry[],
   signals: CandidateSignals,
   currentCode: string | undefined,
+  memory: Pick<InterviewMemory, 'strengths' | 'unresolvedConcerns' | 'repeatedMistakes'>,
 ): InterviewPlan => {
   const message = transcript.at(-1)?.content.toLowerCase() ?? '';
   const hasCode = Boolean(currentCode?.trim());
@@ -174,6 +208,7 @@ export const updateInterviewPlan = (
     ...plan,
     currentStage,
     coverage,
+    skillEstimate: estimateSkill(memory),
     nextProbe: chooseNextProbe(mode, coverage, currentStage),
     updatedAt: new Date().toISOString(),
   };

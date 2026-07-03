@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const PREFERRED_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
 const SILENCE_THRESHOLD = 0.035;
-const SILENCE_DELAY_MS = 900;
-const MIN_SPEECH_MS = 500;
-const MAX_SPEECH_MS = 20_000;
-const SAMPLE_INTERVAL_MS = 100;
+// Long enough that a normal thinking pause or breath mid-sentence doesn't get mistaken
+// for "done talking" and cut the candidate off.
+const SILENCE_DELAY_MS = 1100;
+const MIN_SPEECH_MS = 180;
+const MAX_SPEECH_MS = 30_000;
+const SAMPLE_INTERVAL_MS = 50;
 
 const pickSupportedMimeType = (): string | undefined =>
   PREFERRED_MIME_TYPES.find(
@@ -15,8 +17,6 @@ const pickSupportedMimeType = (): string | undefined =>
 type StartOptions = {
   autoStop?: boolean;
   onAutoStop?: (blob: Blob | undefined) => void;
-  onSpeechStart?: () => void;
-  speechThreshold?: number;
 };
 
 export function useVoiceRecorder() {
@@ -69,10 +69,7 @@ export function useVoiceRecorder() {
   }, [stopSilenceDetection]);
 
   const startSilenceDetection = useCallback(
-    (
-      stream: MediaStream,
-      options: Pick<StartOptions, 'onAutoStop' | 'onSpeechStart' | 'speechThreshold'>,
-    ) => {
+    (stream: MediaStream, options: Pick<StartOptions, 'onAutoStop'>) => {
       const context = new AudioContext();
       const analyser = context.createAnalyser();
       analyser.fftSize = 512;
@@ -85,7 +82,6 @@ export function useVoiceRecorder() {
       let hasHeardSpeech = false;
       let firstSpeechAt = 0;
       let lastSpeechAt = 0;
-      const speechThreshold = options.speechThreshold ?? SILENCE_THRESHOLD;
 
       sampleTimerRef.current = window.setInterval(() => {
         const data = sampleDataRef.current;
@@ -102,10 +98,7 @@ export function useVoiceRecorder() {
         const now = Date.now();
         const level = Math.sqrt(sumSquares / data.length);
 
-        if (level > speechThreshold) {
-          if (!hasHeardSpeech) {
-            options.onSpeechStart?.();
-          }
+        if (level > SILENCE_THRESHOLD) {
           hasHeardSpeech = true;
           firstSpeechAt = firstSpeechAt || now;
           lastSpeechAt = now;

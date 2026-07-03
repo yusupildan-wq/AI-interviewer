@@ -4,11 +4,10 @@ import type {
   InterventionType,
   ScoreRubric,
 } from '@ai-interviewer/shared';
-import Groq from 'groq-sdk';
 
 import { env } from '../../config/env.js';
 import { HttpError } from '../../shared/http-error.js';
-import { getGroqClient } from '../llm/groq-client.js';
+import { createStructuredChatCompletion } from '../llm/openai-client.js';
 import { decisionEngineJsonSchema } from './decision-engine.schema.js';
 import { buildDecisionEngineSystemPrompt, buildDecisionEngineUserPrompt } from './prompt.js';
 
@@ -25,6 +24,13 @@ const INTERVENTION_TYPES: InterventionType[] = [
 ];
 
 const MAX_SCORE_DELTA = 5;
+
+const ZERO_SCORE_IMPACT: ScoreRubric = {
+  communication: 0,
+  problemSolving: 0,
+  technicalDepth: 0,
+  confidence: 0,
+};
 
 const clampDelta = (value: unknown): number => {
   const num = typeof value === 'number' && Number.isFinite(value) ? value : 0;
@@ -70,54 +76,108 @@ const parseDecisionOutput = (raw: string): DecisionEngineOutput => {
         ? parsed.messageToCandidate
         : '',
     scoreImpact,
+    notableMention: typeof parsed.notableMention === 'string' ? parsed.notableMention.trim() : '',
+  };
+};
+
+const hasTechnicalContent = (message: string): boolean =>
+  /\b(approach|assume|constraint|complexity|edge|test|tradeoff|hash|map|list|cache|node|pointer|array|object|database|api|queue|stack|get|put|evict|capacity)\b/i.test(
+    message,
+  );
+
+/** Genuine safety net only: used if the real decision engine call times out or errors,
+ * never as a routine substitute for it. Every normal turn goes through the real model so
+ * replies stay grounded in what the candidate actually said. */
+const timeoutDecision = (input: DecisionEngineInput): DecisionEngineOutput => {
+  const message = input.currentCandidateMessage.trim();
+  const signals = input.candidateSignals;
+
+  if (signals.asksClarifyingQuestion || message.endsWith('?')) {
+    return {
+      shouldIntervene: true,
+      interventionType: 'encourage',
+      reason: 'Decision engine timed out; answer the clarification quickly and keep momentum.',
+      messageToCandidate: 'Good question. State the assumption you would make, and keep going.',
+      scoreImpact: ZERO_SCORE_IMPACT,
+      notableMention: '',
+    };
+  }
+
+  if (signals.hedgingPhraseCount >= 3 && !hasTechnicalContent(message)) {
+    return {
+      shouldIntervene: true,
+      interventionType: 'redirect',
+      reason: 'Decision engine timed out while candidate sounded stuck; give a short nudge.',
+      messageToCandidate: 'Let us make it concrete. What approach do you want to commit to first?',
+      scoreImpact: ZERO_SCORE_IMPACT,
+      notableMention: '',
+    };
+  }
+
+  return {
+    shouldIntervene: true,
+    interventionType: 'deepen',
+    reason: 'Decision engine timed out; respond with a short follow-up instead of stalling.',
+    messageToCandidate:
+      input.mode === 'coding'
+        ? 'Got it. Keep going. What is the next step in your approach?'
+        : 'Got it. What is the next decision you would make from there?',
+    scoreImpact: ZERO_SCORE_IMPACT,
+    notableMention: '',
   };
 };
 
 export const runDecisionEngine = async (
   input: DecisionEngineInput,
 ): Promise<DecisionEngineOutput> => {
-  const client = getGroqClient();
-
-  let response;
+  let content: string;
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    response = await client.chat.completions.create({
+    const controller = new AbortController();
+    const responsePromise = createStructuredChatCompletion({
       model: env.decisionEngineModel,
-      // Reasoning tokens count against this budget before the JSON answer is emitted, and
-      // a too-tight limit causes the model to run out of room and return an empty/invalid
-      // completion (Groq error code json_validate_failed). Kept well under the account's
-      // 8000 TPM cap alongside the ~3-4k token system+user prompt — see reasoning_effort
-      // below, which is the main lever for keeping reasoning-token usage predictable.
-      max_completion_tokens: 900,
       // Higher than a typical extraction task on purpose: the whole point is to sound
       // like a real person, not the same templated phrasing every turn.
-      temperature: 0.45,
-      reasoning_effort: env.decisionEngineReasoningEffort as 'low' | 'medium' | 'high',
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'interviewer_decision',
-          schema: decisionEngineJsonSchema,
-          strict: true,
-        },
-      },
+      temperature: 0.7,
+      // A tight cap on top of the prompt's own brevity instruction — generation time
+      // scales directly with completion length, and this is on the reply-latency
+      // critical path (the TTS call that follows can't start until this returns).
+      maxCompletionTokens: 300,
+      jsonSchemaName: 'interviewer_decision',
+      jsonSchema: decisionEngineJsonSchema,
       messages: [
         { role: 'system', content: buildDecisionEngineSystemPrompt(input.strictness) },
         { role: 'user', content: buildDecisionEngineUserPrompt(input) },
       ],
+      signal: controller.signal,
     });
+
+    const timeoutPromise = new Promise<'timeout'>((resolve) => {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        resolve('timeout');
+      }, env.decisionEngineTimeoutMs);
+    });
+
+    const result = await Promise.race([responsePromise, timeoutPromise]);
+
+    if (result === 'timeout') {
+      void responsePromise.catch(() => undefined);
+      return timeoutDecision(input);
+    }
+
+    content = result;
   } catch (caught) {
-    if (caught instanceof Groq.APIError) {
-      throw new HttpError(
-        502,
-        `Interviewer Decision Engine request failed (${caught.status}): ${caught.message}`,
-      );
+    if (timedOut) {
+      return timeoutDecision(input);
     }
     throw caught;
-  }
-
-  const content = response.choices[0]?.message.content;
-  if (!content) {
-    throw new HttpError(502, 'Interviewer Decision Engine returned no content.');
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
   }
 
   return parseDecisionOutput(content);

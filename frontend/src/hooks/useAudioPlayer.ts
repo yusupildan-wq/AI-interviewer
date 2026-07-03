@@ -11,6 +11,7 @@ export function useAudioPlayer() {
   const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const rafRef = useRef<number | null>(null);
   const resolveRef = useRef<(() => void) | null>(null);
+  const speechResolveRef = useRef<(() => void) | null>(null);
 
   const stopLevelLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -41,6 +42,9 @@ export function useAudioPlayer() {
     (blob: Blob): Promise<void> => {
       return new Promise((resolve, reject) => {
         audioRef.current?.pause();
+        window.speechSynthesis?.cancel();
+        speechResolveRef.current?.();
+        speechResolveRef.current = null;
         resolveRef.current?.();
         resolveRef.current = null;
         stopLevelLoop();
@@ -112,11 +116,62 @@ export function useAudioPlayer() {
 
   const stop = useCallback(() => {
     audioRef.current?.pause();
+    window.speechSynthesis?.cancel();
     setIsSpeaking(false);
     stopLevelLoop();
     resolveRef.current?.();
     resolveRef.current = null;
+    speechResolveRef.current?.();
+    speechResolveRef.current = null;
   }, [stopLevelLoop]);
 
-  return { isSpeaking, level, play, stop };
+  const speakText = useCallback(
+    (text: string): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+          reject(new Error('Browser speech synthesis is unavailable.'));
+          return;
+        }
+
+        audioRef.current?.pause();
+        resolveRef.current?.();
+        resolveRef.current = null;
+        stopLevelLoop();
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice =
+          voices.find((voice) => /natural|neural|premium/i.test(voice.name)) ??
+          voices.find((voice) => voice.lang.startsWith('en')) ??
+          voices[0];
+
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+        }
+        utterance.rate = 1.03;
+        utterance.pitch = 0.92;
+
+        speechResolveRef.current = resolve;
+        utterance.onstart = () => {
+          setIsSpeaking(true);
+        };
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          speechResolveRef.current = null;
+          resolve();
+        };
+        utterance.onerror = () => {
+          setIsSpeaking(false);
+          speechResolveRef.current = null;
+          reject(new Error('Browser speech synthesis failed.'));
+        };
+
+        window.speechSynthesis.speak(utterance);
+      });
+    },
+    [stopLevelLoop],
+  );
+
+  return { isSpeaking, level, play, speakText, stop };
 }

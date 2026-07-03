@@ -9,15 +9,23 @@ import {
   BarChart3,
   CalendarClock,
   CircleAlert,
+  Trash2,
   Loader2,
   Play,
   Target,
   TrendingUp,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { ApiError, getProfile, getProgressOverview, listInterviewHistory } from '../lib/api';
+import {
+  ApiError,
+  deleteAllInterviews,
+  deleteInterview,
+  getProfile,
+  getProgressOverview,
+  listInterviewHistory,
+} from '../lib/api';
 
 const modeLabel: Record<InterviewMode, string> = {
   behavioral: 'Behavioral',
@@ -151,7 +159,15 @@ const PracticePlanPanel = ({ overview }: { overview: ProgressOverview }) => (
   </div>
 );
 
-const HistoryTable = ({ history }: { history: InterviewSessionSummary[] }) => {
+const HistoryTable = ({
+  history,
+  onDelete,
+  deletingId,
+}: {
+  history: InterviewSessionSummary[];
+  onDelete: (session: InterviewSessionSummary) => void;
+  deletingId?: string;
+}) => {
   const [filter, setFilter] = useState<InterviewMode | 'all'>('all');
   const filtered = useMemo(
     () => history.filter((session) => filter === 'all' || session.mode === filter),
@@ -191,32 +207,53 @@ const HistoryTable = ({ history }: { history: InterviewSessionSummary[] }) => {
                 ? `/interview/${session.id}/report`
                 : `/interview/${session.id}`;
             return (
-              <li key={session.id}>
-                <Link
-                  to={to}
-                  className="grid gap-3 p-4 transition hover:bg-slatewash md:grid-cols-[1fr_auto_auto]"
-                >
-                  <div>
+              <li
+                key={session.id}
+                className="grid gap-3 p-4 transition hover:bg-slatewash md:grid-cols-[1fr_auto_auto_auto]"
+              >
+                <Link to={to} className="min-w-0">
+                  <div className="min-w-0">
                     <p className="font-semibold text-ink">{session.problemTitle}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.08em] text-graphite">
                       {modeLabel[session.mode]} / {session.strictness} /{' '}
                       {formatDate(session.startedAt)}
                     </p>
                   </div>
-                  <span
-                    className={[
-                      'w-fit rounded-full px-3 py-1 text-xs font-semibold md:self-center',
-                      session.status === 'completed'
-                        ? 'bg-signal/15 text-signal'
-                        : 'bg-amberline/15 text-amberline',
-                    ].join(' ')}
-                  >
-                    {session.status === 'completed'
-                      ? `${averageScore(session.scores)}/100`
-                      : 'Continue'}
-                  </span>
-                  <ArrowRight className="hidden text-graphite md:block md:self-center" size={16} />
                 </Link>
+                <span
+                  className={[
+                    'w-fit rounded-full px-3 py-1 text-xs font-semibold md:self-center',
+                    session.status === 'completed'
+                      ? 'bg-signal/15 text-signal'
+                      : 'bg-amberline/15 text-amberline',
+                  ].join(' ')}
+                >
+                  {session.status === 'completed'
+                    ? `${averageScore(session.scores)}/100`
+                    : 'Continue'}
+                </span>
+                <Link
+                  to={to}
+                  className="hidden text-graphite transition hover:text-ink md:block md:self-center"
+                  aria-label={`Open ${session.problemTitle}`}
+                  title={`Open ${session.problemTitle}`}
+                >
+                  <ArrowRight size={16} />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => onDelete(session)}
+                  disabled={deletingId === session.id}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-400/25 bg-red-400/10 text-red-200 transition hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-50 md:self-center"
+                  aria-label={`Delete ${session.problemTitle}`}
+                  title={`Delete ${session.problemTitle}`}
+                >
+                  {deletingId === session.id ? (
+                    <Loader2 className="animate-spin" size={16} aria-hidden="true" />
+                  ) : (
+                    <Trash2 size={16} aria-hidden="true" />
+                  )}
+                </button>
               </li>
             );
           })}
@@ -231,27 +268,69 @@ export const DashboardPage = () => {
   const [overview, setOverview] = useState<ProgressOverview>();
   const [history, setHistory] = useState<InterviewSessionSummary[]>();
   const [error, setError] = useState<string>();
+  const [deletingId, setDeletingId] = useState<string>();
+  const [isClearing, setIsClearing] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    Promise.all([getProfile(), getProgressOverview(), listInterviewHistory()])
-      .then(([loadedProfile, loadedOverview, loadedHistory]) => {
-        if (cancelled) return;
+  const loadDashboard = useCallback((cancelledRef?: { current: boolean }) => {
+    return Promise.all([getProfile(), getProgressOverview(), listInterviewHistory()]).then(
+      ([loadedProfile, loadedOverview, loadedHistory]) => {
+        if (cancelledRef?.current) return;
         setProfile(loadedProfile);
         setOverview(loadedOverview);
         setHistory(loadedHistory);
-      })
-      .catch((caught) => {
-        if (!cancelled) {
-          setError(caught instanceof ApiError ? caught.message : 'Could not load dashboard.');
-        }
-      });
+      },
+    );
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cancelledRef = { current: false };
+
+    loadDashboard(cancelledRef).catch((caught) => {
+      if (!cancelled) {
+        setError(caught instanceof ApiError ? caught.message : 'Could not load dashboard.');
+      }
+    });
 
     return () => {
       cancelled = true;
+      cancelledRef.current = true;
     };
-  }, []);
+  }, [loadDashboard]);
+
+  const handleDeleteInterview = async (session: InterviewSessionSummary) => {
+    const confirmed = window.confirm(`Delete "${session.problemTitle}" from your history?`);
+    if (!confirmed) return;
+
+    setDeletingId(session.id);
+    setError(undefined);
+    try {
+      await deleteInterview(session.id);
+      await loadDashboard();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not delete interview.');
+    } finally {
+      setDeletingId(undefined);
+    }
+  };
+
+  const handleClearInterviews = async () => {
+    const confirmed = window.confirm(
+      'Delete every interview and report from your account? Your profile and login stay intact.',
+    );
+    if (!confirmed) return;
+
+    setIsClearing(true);
+    setError(undefined);
+    try {
+      await deleteAllInterviews();
+      await loadDashboard();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not clear interviews.');
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   if (error) {
     return (
@@ -284,6 +363,21 @@ export const DashboardPage = () => {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          {history.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleClearInterviews()}
+              disabled={isClearing}
+              className="inline-flex items-center gap-2 rounded-md border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-200 transition hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isClearing ? (
+                <Loader2 className="animate-spin" size={16} aria-hidden="true" />
+              ) : (
+                <Trash2 size={16} aria-hidden="true" />
+              )}
+              Clean state
+            </button>
+          )}
           {latestActive && (
             <Link
               to={`/interview/${latestActive.id}`}
@@ -392,7 +486,11 @@ export const DashboardPage = () => {
       )}
 
       <div className="mt-6">
-        <HistoryTable history={history} />
+        <HistoryTable
+          history={history}
+          onDelete={(session) => void handleDeleteInterview(session)}
+          deletingId={deletingId}
+        />
       </div>
     </section>
   );

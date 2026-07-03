@@ -29,6 +29,8 @@ import {
   applyInterviewMemoryUpdate,
   applyScoreImpact,
   createSession,
+  deleteAllSessionsForUser,
+  deleteSessionForUser,
   endSession,
   getSession,
   listSessionsForUser,
@@ -94,12 +96,31 @@ interviewSessionRouter.post(
   }),
 );
 
+interviewSessionRouter.delete(
+  '/',
+  asyncHandler(async (request, response) => {
+    const { user } = request as AuthenticatedRequest;
+    const deletedCount = await deleteAllSessionsForUser(user.id);
+    response.json({ deletedCount });
+  }),
+);
+
 interviewSessionRouter.get(
   '/:id',
   asyncHandler(async (request, response) => {
     const { user } = request as AuthenticatedRequest;
     const session = await requireOwnedSession(requireParam(request.params.id, 'id'), user.id);
     response.json(toCandidateSession(session));
+  }),
+);
+
+interviewSessionRouter.delete(
+  '/:id',
+  asyncHandler(async (request, response) => {
+    const { user } = request as AuthenticatedRequest;
+    const sessionId = requireParam(request.params.id, 'id');
+    await deleteSessionForUser(sessionId, user.id);
+    response.status(204).send();
   }),
 );
 

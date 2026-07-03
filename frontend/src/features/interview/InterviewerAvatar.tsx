@@ -1,15 +1,15 @@
 import { Mic, Radio } from 'lucide-react';
 
-import heroBackground from '../../assets/interview-hero.png';
+import roomBackdrop from '../../assets/environments/relax-inn-seaview-suite.jpg';
 import { InterviewerScene } from './avatar3d/InterviewerScene';
 
 export type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 const STATE_LABEL: Record<AvatarState, string> = {
   idle: 'Ready',
-  listening: 'Listening…',
-  thinking: 'Thinking…',
-  speaking: 'Speaking…',
+  listening: 'Listening...',
+  thinking: 'Thinking...',
+  speaking: 'Speaking...',
 };
 
 interface InterviewerAvatarProps {
@@ -34,27 +34,25 @@ export const InterviewerAvatar = ({
         isActive ? 'border-signal/50' : 'border-white/10'
       }`}
     >
-      {/* Blurred office backdrop, like a real video-call background */}
+      {/* Photographed room backdrop behind the transparent 3D robot canvas. */}
       <img
-        src={heroBackground}
+        src={roomBackdrop}
         alt=""
         aria-hidden="true"
-        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-md"
+        className="absolute inset-0 h-full w-full object-cover object-center"
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-canvas/80 via-canvas/55 to-canvas/85" />
+      <div className="absolute inset-0 bg-canvas/15" aria-hidden="true" />
 
-      {/* 3D character feed */}
       <div className="absolute inset-0">
         <InterviewerScene state={state} audioLevel={audioLevel} />
       </div>
 
-      {/* Vignette to sell the "webcam feed" look */}
+      {/* Vignette to sell the video-call feed look. */}
       <div
         className="pointer-events-none absolute inset-0 shadow-[inset_0_0_90px_30px_rgba(0,0,0,0.65)]"
         aria-hidden="true"
       />
 
-      {/* Live indicator */}
       <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-canvas/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-graphite backdrop-blur">
         <Radio
           size={11}
@@ -64,7 +62,6 @@ export const InterviewerAvatar = ({
         Live
       </div>
 
-      {/* Name tag + status, modeled on a real video-call tile */}
       <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-canvas/70 px-3 py-1.5 backdrop-blur">
         <span
           className={`grid h-5 w-5 place-items-center rounded-full transition-colors ${

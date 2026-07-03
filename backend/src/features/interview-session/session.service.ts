@@ -17,11 +17,12 @@ import type {
 
 import { HttpError } from '../../shared/http-error.js';
 import { findProblemById, pickRandomProblemForMode } from '../problems/problems.data.js';
+import { calibrateFinalScores } from '../scoring/scoring.service.js';
 import { createInterviewMemory, updateInterviewMemory } from './interview-memory.service.js';
 import { createInterviewPlan, updateInterviewPlan } from './interview-plan.service.js';
 import { sessionRepository } from './session.repository.js';
 
-const BASELINE_SCORE = 50;
+const BASELINE_SCORE = 0;
 const MIN_SCORE = 0;
 const MAX_SCORE = 100;
 
@@ -192,6 +193,16 @@ export const requireActiveSession = async (sessionId: string): Promise<Interview
 export const listSessionsForUser = (userId: string): Promise<InterviewSessionSummary[]> =>
   sessionRepository.listByUser(userId);
 
+export const deleteSessionForUser = async (sessionId: string, userId: string): Promise<void> => {
+  const deleted = await sessionRepository.deleteByIdForUser(sessionId, userId);
+  if (!deleted) {
+    throw new HttpError(404, `Interview session not found: ${sessionId}`);
+  }
+};
+
+export const deleteAllSessionsForUser = (userId: string): Promise<number> =>
+  sessionRepository.deleteAllForUser(userId);
+
 export const appendCandidateMessage = async (
   sessionId: string,
   message: string,
@@ -239,6 +250,7 @@ export const applyCandidateSignalsToPlan = async (
     session.transcript,
     signals,
     currentCode,
+    session.memory,
   );
   return sessionRepository.save(session);
 };
@@ -299,8 +311,14 @@ export const applyScoreImpact = async (
 };
 
 export const endSession = async (sessionId: string): Promise<InterviewSession> => {
-  const session = await requireActiveSession(sessionId);
+  const session = await getSession(sessionId);
+
+  if (session.status === 'completed') {
+    return session;
+  }
+
   session.status = 'completed';
   session.endedAt = new Date().toISOString();
+  session.scores = calibrateFinalScores(session);
   return sessionRepository.save(session);
 };

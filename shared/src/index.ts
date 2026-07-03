@@ -119,6 +119,10 @@ export interface InterviewMemory {
   unresolvedConcerns: string[];
   strengths: string[];
   repeatedMistakes: string[];
+  /** Open-ended, non-technical or personal things the candidate mentioned in passing
+   * (a prior internship, a specific technology, a hobby) that the interviewer should be
+   * able to reference by name later, the way a real interviewer remembers a conversation. */
+  notableMentions: string[];
   nextBestProbe: string;
   rubricV2: RubricV2;
   evidence: InterviewEvidenceEvent[];
@@ -168,6 +172,10 @@ export interface DecisionEngineOutput {
   reason: string;
   messageToCandidate: string;
   scoreImpact: ScoreRubric;
+  /** A short phrase capturing something worth remembering long-term from this turn (a
+   * technology, project, or personal detail) — empty string when nothing new stands out.
+   * Extracted by the same call, at no extra latency cost, rather than a separate pass. */
+  notableMention: string;
 }
 
 export type InterviewStatus = 'active' | 'completed';
@@ -190,6 +198,10 @@ export interface InterviewPlanCoverage {
   testing: boolean;
 }
 
+/** Coarse, heuristically-derived read on how the candidate is doing so far, used to
+ * scale question difficulty up or down the way a real interviewer would. */
+export type SkillEstimate = 'building-confidence' | 'on-track' | 'strong';
+
 export interface InterviewPlan {
   currentStage: InterviewStage;
   primaryFocus: string;
@@ -200,6 +212,7 @@ export interface InterviewPlan {
   weakAreas: string[];
   milestones: string[];
   coverage: InterviewPlanCoverage;
+  skillEstimate: SkillEstimate;
   nextProbe: string;
   updatedAt: string;
 }

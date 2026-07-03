@@ -14,6 +14,9 @@ const barColor = (value: number): string => {
 };
 
 const readLabel = (value: number): string => {
+  if (value <= 1) return 'No signal';
+  if (value < 15) return 'Very weak';
+  if (value < 35) return 'Weak';
   if (value >= 75) return 'Strong';
   if (value >= 60) return 'Positive';
   if (value >= 45) return 'Neutral';

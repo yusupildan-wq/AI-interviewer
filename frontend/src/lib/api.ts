@@ -103,6 +103,12 @@ export const listInterviewHistory = (): Promise<InterviewSessionSummary[]> =>
 
 export const getProgressOverview = (): Promise<ProgressOverview> => request('/progress');
 
+export const deleteInterview = (sessionId: string): Promise<void> =>
+  request(`/interviews/${sessionId}`, { method: 'DELETE' });
+
+export const deleteAllInterviews = (): Promise<{ deletedCount: number }> =>
+  request('/interviews', { method: 'DELETE' });
+
 export const createInterview = (body: CreateInterviewRequest): Promise<CandidateInterviewSession> =>
   request('/interviews', { method: 'POST', body: JSON.stringify(body) });
 

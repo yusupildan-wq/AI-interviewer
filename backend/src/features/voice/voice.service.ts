@@ -5,6 +5,8 @@ import { HttpError } from '../../shared/http-error.js';
 import { getGroqClient } from '../llm/groq-client.js';
 
 const MAX_TTS_CHARS = 2000;
+// Shared by both live-turn replies (kept short by the decision-engine prompt) and the
+// longer end-of-interview spoken debrief — sized for the debrief, not the turn.
 const MAX_SPOKEN_CHARS = 700;
 const OPENAI_SPEECH_ENDPOINT = 'https://api.openai.com/v1/audio/speech';
 

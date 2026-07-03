@@ -12,7 +12,7 @@ import type {
   TranscriptEntry,
 } from '@ai-interviewer/shared';
 
-const BASELINE = 50;
+const BASELINE = 0;
 const MAX_EVIDENCE = 40;
 
 const baselineRubricV2 = (): RubricV2 => ({
@@ -51,6 +51,7 @@ export const createInterviewMemory = (mode: InterviewMode): InterviewMemory => (
   unresolvedConcerns: [],
   strengths: [],
   repeatedMistakes: [],
+  notableMentions: [],
   nextBestProbe:
     mode === 'coding'
       ? 'Listen for assumptions, approach, complexity, and edge-case handling.'
@@ -254,11 +255,15 @@ export const updateInterviewMemory = (
   }
 
   const evidence = [...memory.evidence, ...generated].slice(-MAX_EVIDENCE);
+  const notableMentions = decision.notableMention
+    ? unique([...memory.notableMentions, decision.notableMention], 8)
+    : memory.notableMentions;
   const nextMemory: InterviewMemory = {
     explainedConcepts: unique(explained),
     unresolvedConcerns: unique(concerns),
     strengths: unique(strengths),
     repeatedMistakes: unique(mistakes),
+    notableMentions,
     nextBestProbe: memory.nextBestProbe,
     rubricV2: rubric,
     evidence,
