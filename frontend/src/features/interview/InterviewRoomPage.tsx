@@ -49,6 +49,7 @@ const MODE_LABEL: Record<InterviewMode, string> = {
   coding: 'Live coding',
   'system-design': 'System design',
   'resume-deep-dive': 'Resume deep dive',
+  conversation: 'Conversation',
 };
 
 type SidePanel = 'problem' | 'code' | 'transcript' | 'score';
@@ -177,6 +178,7 @@ export const InterviewRoomPage = () => {
   }, [session]);
 
   const isCoding = session?.mode === 'coding';
+  const isConversation = session?.mode === 'conversation';
   const isCompleted = session?.status === 'completed';
   const isDebriefLocked =
     debriefState === 'generating' || debriefState === 'speaking' || debriefState === 'answering';
@@ -480,7 +482,7 @@ export const InterviewRoomPage = () => {
     icon: typeof BookOpenText;
     disabled?: boolean;
   }[] = [
-    { id: 'problem', label: 'Problem', icon: BookOpenText },
+    { id: 'problem', label: isConversation ? 'Topic' : 'Problem', icon: BookOpenText },
     { id: 'code', label: 'Code', icon: Code2, disabled: !isCoding },
     { id: 'transcript', label: 'Transcript', icon: MessageSquareText },
     { id: 'score', label: 'Live read', icon: Activity },
@@ -534,7 +536,9 @@ export const InterviewRoomPage = () => {
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-signal">
               {session.persona.name}
             </p>
-            <h1 className="mt-1 truncate text-xl font-bold text-ink">{session.problem.title}</h1>
+            <h1 className="mt-1 truncate text-xl font-bold text-ink">
+              {isConversation ? 'Conversation' : session.problem.title}
+            </h1>
             <p className="mt-1 line-clamp-2 text-sm text-graphite">{session.plan.primaryFocus}</p>
           </div>
 
@@ -736,7 +740,7 @@ export const InterviewRoomPage = () => {
           <aside className="h-full min-h-[560px] w-full overflow-hidden rounded-md border border-white/10 bg-surface xl:w-[440px]">
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
               <h2 className="text-sm font-semibold text-ink">
-                {activePanel === 'problem' && 'Problem'}
+                {activePanel === 'problem' && (isConversation ? 'Topic' : 'Problem')}
                 {activePanel === 'code' && 'Code workspace'}
                 {activePanel === 'transcript' && 'Transcript'}
                 {activePanel === 'score' && 'Live read'}

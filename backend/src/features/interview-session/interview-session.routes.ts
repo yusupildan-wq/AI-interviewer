@@ -36,7 +36,13 @@ import {
   listSessionsForUser,
 } from './session.service.js';
 
-const VALID_MODES: InterviewMode[] = ['behavioral', 'coding', 'system-design', 'resume-deep-dive'];
+const VALID_MODES: InterviewMode[] = [
+  'behavioral',
+  'coding',
+  'system-design',
+  'resume-deep-dive',
+  'conversation',
+];
 const VALID_STRICTNESS: InterviewerStrictness[] = ['coffee-chat', 'standard', 'strict'];
 
 const toCandidateSession = (session: InterviewSession) => ({

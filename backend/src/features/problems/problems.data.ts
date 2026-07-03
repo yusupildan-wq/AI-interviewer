@@ -2,6 +2,23 @@ import type { Problem } from '@ai-interviewer/shared';
 
 export const problems: Problem[] = [
   {
+    id: 'conversation-mode',
+    mode: 'conversation',
+    title: 'Open Conversation',
+    prompt:
+      'A relaxed conversation with Alex. There is no interview question to solve, no coding task, and no required structure. Talk naturally about whatever you want: your background, goals, projects, interview anxiety, tech, or practice topics.',
+    difficulty: 'easy',
+    category: 'conversation',
+    idealApproachNotes:
+      'This is not an evaluative interview. The interviewer should be natural, responsive, curious, and concise. Do not redirect toward a coding problem or force STAR structure unless the user explicitly asks to practice that.',
+    followUpAreas: [
+      'What the user wants to talk about',
+      'Their goals and current context',
+      'Specific topics they mention by name',
+      'Gentle follow-up questions that keep the conversation moving naturally',
+    ],
+  },
+  {
     id: 'two-sum',
     mode: 'coding',
     title: 'Two Sum',

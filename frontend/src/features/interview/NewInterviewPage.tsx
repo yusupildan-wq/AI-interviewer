@@ -13,6 +13,12 @@ import {
 
 const MODES: { value: InterviewMode; label: string; description: string; icon: typeof Code2 }[] = [
   {
+    value: 'conversation',
+    label: 'Conversation',
+    description: 'A normal back-and-forth call with Alex. No problem, no rubric pressure.',
+    icon: MessageSquareText,
+  },
+  {
     value: 'coding',
     label: 'Coding',
     description: 'Live coding with a real-time editor and complexity follow-ups.',
@@ -127,7 +133,7 @@ export const NewInterviewPage = () => {
       const session = await createInterview({
         mode,
         strictness,
-        problemId: problemId || undefined,
+        problemId: mode === 'conversation' ? undefined : problemId || undefined,
       });
       navigate(`/interview/${session.id}`);
     } catch (caught) {
@@ -230,7 +236,7 @@ export const NewInterviewPage = () => {
         </div>
       </div>
 
-      {problems.length > 0 && (
+      {mode !== 'conversation' && problems.length > 0 && (
         <div className="mt-8">
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
             Pick a problem

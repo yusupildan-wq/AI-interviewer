@@ -11,7 +11,8 @@ export const APP_NAME = 'AI Interviewer';
 // Interview domain
 // ---------------------------------------------------------------------------
 
-export type InterviewMode = 'behavioral' | 'coding' | 'system-design' | 'resume-deep-dive';
+export type InterviewMode =
+  'behavioral' | 'coding' | 'system-design' | 'resume-deep-dive' | 'conversation';
 
 /**
  * How hard the interviewer pushes — independent of interview mode. Mode is "what

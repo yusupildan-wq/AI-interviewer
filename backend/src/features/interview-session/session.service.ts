@@ -57,6 +57,10 @@ const openingMessageForMode = (
   strictness: InterviewerStrictness,
   profile?: UserProfile,
 ): string => {
+  if (mode === 'conversation') {
+    return `Hey, I'm Alex. No interview question this time - just a normal conversation. What's on your mind?`;
+  }
+
   const targetContext = profile
     ? ` I will calibrate this for a ${profile.seniority} ${profile.targetRole} interview${
         profile.targetCompanies.length > 0

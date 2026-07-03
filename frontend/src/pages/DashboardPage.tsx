@@ -32,10 +32,12 @@ const modeLabel: Record<InterviewMode, string> = {
   coding: 'Coding',
   'system-design': 'System design',
   'resume-deep-dive': 'Resume deep dive',
+  conversation: 'Conversation',
 };
 
 const modeFilters: Array<InterviewMode | 'all'> = [
   'all',
+  'conversation',
   'coding',
   'system-design',
   'behavioral',

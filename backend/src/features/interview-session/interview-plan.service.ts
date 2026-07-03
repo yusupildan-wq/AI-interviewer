@@ -21,6 +21,7 @@ const DEFAULT_PROFILE: Pick<
 };
 
 const focusForMode = (mode: InterviewMode): string => {
+  if (mode === 'conversation') return 'natural conversation, active listening, and helpful context';
   if (mode === 'coding') return 'reasoning out loud, correctness, complexity, and edge cases';
   if (mode === 'system-design') return 'requirements, scale, tradeoffs, and failure modes';
   if (mode === 'behavioral')
@@ -29,6 +30,15 @@ const focusForMode = (mode: InterviewMode): string => {
 };
 
 const milestonesForMode = (mode: InterviewMode): string[] => {
+  if (mode === 'conversation') {
+    return [
+      'Listen to what the user wants to talk about',
+      'Respond naturally and specifically',
+      'Ask light follow-up questions when useful',
+      'Remember personal context they mention',
+      'Keep the call relaxed and conversational',
+    ];
+  }
   if (mode === 'coding') {
     return [
       'Clarify requirements and constraints',
@@ -66,6 +76,7 @@ const milestonesForMode = (mode: InterviewMode): string[] => {
 };
 
 const initialProbeForMode = (mode: InterviewMode): string => {
+  if (mode === 'conversation') return 'Ask what they want to talk about and follow their lead.';
   if (mode === 'coding')
     return 'Listen for clarification before approach; probe complexity if omitted.';
   if (mode === 'system-design') return 'Listen for scope and scale before architecture choices.';
@@ -135,6 +146,11 @@ const inferStage = (
 ): InterviewStage => {
   const candidateTurns = countCandidateTurns(transcript);
 
+  if (mode === 'conversation') {
+    if (!hasCandidateTurns(transcript)) return 'opening';
+    return candidateTurns >= 8 ? 'wrap-up' : 'deep-dive';
+  }
+
   if (!hasCandidateTurns(transcript)) return 'opening';
   if (!coverage.requirements && candidateTurns <= 2) return 'clarification';
   if (!coverage.approach && candidateTurns <= 3) return 'approach';
@@ -161,6 +177,7 @@ const chooseNextProbe = (
   coverage: InterviewPlan['coverage'],
   stage: InterviewStage,
 ): string => {
+  if (mode === 'conversation') return 'Follow the latest thing the user said naturally.';
   if (!coverage.requirements)
     return 'Ask for explicit assumptions or requirements if the next turn skips them.';
   if (!coverage.approach) return 'Ask the candidate to commit to an approach and why it fits.';

@@ -1,4 +1,8 @@
-import type { DecisionEngineInput, InterviewerStrictness } from '@ai-interviewer/shared';
+import type {
+  DecisionEngineInput,
+  InterviewMode,
+  InterviewerStrictness,
+} from '@ai-interviewer/shared';
 
 const MAX_TRANSCRIPT_TURNS = 12;
 
@@ -271,14 +275,37 @@ unproductive, and use the full -5 to +5 scoreImpact range when a moment genuinel
   templated; it means less patient with vagueness, not more willing to ask filler questions.`,
 };
 
-export const buildDecisionEngineSystemPrompt = (strictness: InterviewerStrictness): string =>
+const CONVERSATION_MODE_OVERLAY = `This session is Conversation Mode, not an interview round.
+
+- Do not point the user toward solving an interview question unless they explicitly ask to practice one.
+- Do not force STAR structure, complexity analysis, edge cases, coding, or system-design structure.
+- Treat Alex as a natural conversation partner on a call: warm, quick, specific, and concise. A normal person
+  does not respond to every sentence by asking another question.
+- Mix response shapes. Often answer directly, react, agree or disagree, share a short opinion, reflect what you
+  heard, or add a related thought. Ask a question only when it is the natural next move.
+- Avoid question-only replies in conversation mode. If you ask something, usually include a real response first:
+  "Yeah, that makes sense - burnout can sneak up fast. Was it mostly workload, or more the uncertainty?"
+- If the user tells you something personal or descriptive, do not immediately interrogate them. Acknowledge it
+  like a person would: "That sounds exhausting." / "Honestly, that's a pretty normal place to be." / "I get why
+  that would bother you."
+- shouldIntervene should normally be true after the user says something, because this is a back-and-forth
+  conversation rather than a candidate thinking silently through a problem.
+- Keep scoreImpact at 0 across all dimensions unless the user explicitly switches into interview practice.
+- If the user asks a direct question, answer it directly first.`;
+
+export const buildDecisionEngineSystemPrompt = (
+  strictness: InterviewerStrictness,
+  mode: InterviewMode,
+): string =>
   `${CORE_SYSTEM_PROMPT}
 
 ===========================================================================
 INTERVIEW STYLE FOR THIS SESSION: ${STRICTNESS_LABEL[strictness]}
 ===========================================================================
 
-${STRICTNESS_OVERLAY[strictness]}`;
+${STRICTNESS_OVERLAY[strictness]}
+
+${mode === 'conversation' ? `\n===========================================================================\nCONVERSATION MODE OVERRIDE\n===========================================================================\n\n${CONVERSATION_MODE_OVERLAY}` : ''}`;
 
 const formatTranscript = (input: DecisionEngineInput): string => {
   const recent = input.transcript.slice(-MAX_TRANSCRIPT_TURNS);
@@ -327,6 +354,20 @@ const formatEvidence = (input: DecisionEngineInput): string => {
 
 export const buildDecisionEngineUserPrompt = (input: DecisionEngineInput): string => {
   const { problem } = input;
+  const problemContext =
+    input.mode === 'conversation'
+      ? `This is Conversation Mode. There is no candidate-facing problem. The stored topic is only a placeholder so the existing session UI can run.`
+      : `Title: ${problem.title}
+Difficulty: ${problem.difficulty}
+Category: ${problem.category}
+Prompt given to candidate: ${problem.prompt}
+${problem.constraints ? `Constraints: ${problem.constraints.join('; ')}` : ''}
+${problem.idealApproachNotes ? `Ideal approach / what to watch for: ${problem.idealApproachNotes}` : ''}
+${problem.followUpAreas ? `Follow-up areas to probe when relevant: ${problem.followUpAreas.join('; ')}` : ''}`;
+  const conversationTurnReminder =
+    input.mode === 'conversation'
+      ? `\n\nConversation mode reminder: reply like a normal person, not a question machine. Do not make the whole response a question unless the user clearly needs clarification. Answer, react, or share a short take first.`
+      : '';
 
   return `## Interview mode
 ${input.mode}
@@ -397,13 +438,7 @@ earlier claims, unresolved concerns, or repeated mistakes. If memory says comple
 turn is about an edge case, ask the more relevant current question.
 
 ## Problem context (private - never read this verbatim to the candidate)
-Title: ${problem.title}
-Difficulty: ${problem.difficulty}
-Category: ${problem.category}
-Prompt given to candidate: ${problem.prompt}
-${problem.constraints ? `Constraints: ${problem.constraints.join('; ')}` : ''}
-${problem.idealApproachNotes ? `Ideal approach / what to watch for: ${problem.idealApproachNotes}` : ''}
-${problem.followUpAreas ? `Follow-up areas to probe when relevant: ${problem.followUpAreas.join('; ')}` : ''}
+${problemContext}
 
 ## Elapsed time in interview
 ${Math.round(input.elapsedMs / 1000)} seconds
@@ -432,5 +467,5 @@ ${input.currentCandidateMessage || '(no message - candidate only updated code)'}
 ## Candidate's current code
 ${input.currentCode ? '```\n' + input.currentCode + '\n```' : '(no code yet, or not applicable for this mode)'}
 
-Decide now: should you intervene, and if so, how? Respond with the decision JSON only.`;
+Decide now: should you intervene, and if so, how?${conversationTurnReminder} Respond with the decision JSON only.`;
 };
