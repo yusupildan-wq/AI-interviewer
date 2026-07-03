@@ -87,10 +87,10 @@ export const runDecisionEngine = async (
       // completion (Groq error code json_validate_failed). Kept well under the account's
       // 8000 TPM cap alongside the ~3-4k token system+user prompt — see reasoning_effort
       // below, which is the main lever for keeping reasoning-token usage predictable.
-      max_completion_tokens: 4096,
+      max_completion_tokens: 900,
       // Higher than a typical extraction task on purpose: the whole point is to sound
       // like a real person, not the same templated phrasing every turn.
-      temperature: 0.7,
+      temperature: 0.45,
       reasoning_effort: env.decisionEngineReasoningEffort as 'low' | 'medium' | 'high',
       response_format: {
         type: 'json_schema',

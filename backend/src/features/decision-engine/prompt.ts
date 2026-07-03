@@ -1,6 +1,6 @@
 import type { DecisionEngineInput, InterviewerStrictness } from '@ai-interviewer/shared';
 
-const MAX_TRANSCRIPT_TURNS = 24;
+const MAX_TRANSCRIPT_TURNS = 12;
 
 const CORE_SYSTEM_PROMPT = `You are the Interviewer Decision Engine for an AI interview platform. You do not simulate a friendly
 chatbot. You simulate a real interviewer — a specific person, with instincts, running a live interview.
@@ -206,11 +206,13 @@ const formatPreviousInterventions = (input: DecisionEngineInput): string => {
     .join('\n');
 };
 
-const formatMemoryList = (items: string[]): string =>
-  items.length > 0 ? items.map((item) => `- ${item}`).join('\n') : '(none yet)';
+const formatMemoryList = (items: string[]): string => {
+  const limited = items.slice(-5);
+  return limited.length > 0 ? limited.map((item) => `- ${item}`).join('\n') : '(none yet)';
+};
 
 const formatEvidence = (input: DecisionEngineInput): string => {
-  const recent = input.memory.evidence.slice(-8);
+  const recent = input.memory.evidence.slice(-4);
   if (recent.length === 0) {
     return '(no evidence captured yet)';
   }

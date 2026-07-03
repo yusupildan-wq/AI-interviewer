@@ -25,11 +25,8 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL,
   groqApiKey: process.env.GROQ_API_KEY,
   openaiApiKey: process.env.OPENAI_API_KEY,
-  decisionEngineModel: process.env.DECISION_ENGINE_MODEL ?? 'openai/gpt-oss-120b',
-  // "high" reliably blows the free-tier 8000 TPM cap on this model once the system+user
-  // prompt is included, causing empty-generation 400s or 413 rate-limit errors. "medium"
-  // is the largest effort level that stays within budget for this prompt size.
-  decisionEngineReasoningEffort: process.env.DECISION_ENGINE_REASONING_EFFORT ?? 'medium',
+  decisionEngineModel: process.env.DECISION_ENGINE_MODEL ?? 'openai/gpt-oss-20b',
+  decisionEngineReasoningEffort: process.env.DECISION_ENGINE_REASONING_EFFORT ?? 'low',
   speechToTextModel: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
   voiceProvider: process.env.VOICE_PROVIDER ?? 'openai',
   openaiTextToSpeechModel: process.env.OPENAI_TTS_MODEL ?? 'gpt-4o-mini-tts',
