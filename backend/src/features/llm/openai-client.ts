@@ -113,6 +113,7 @@ export interface ChatCompletionTextParams {
   temperature?: number;
   maxCompletionTokens: number;
   messages: OpenAiChatMessage[];
+  signal?: AbortSignal;
 }
 
 /** Plain-text completion (no structured output) for free-form conversational replies. */

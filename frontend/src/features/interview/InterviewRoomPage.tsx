@@ -92,6 +92,24 @@ const latestInterviewerMessage = (transcript: TranscriptEntry[]): TranscriptEntr
     .reverse()
     .find((entry) => entry.role === 'interviewer');
 
+const normalizeSpeechText = (value: string): string[] =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2);
+
+const isLikelyInterviewerEcho = (candidateText: string, interviewerText?: string): boolean => {
+  if (!interviewerText) return false;
+
+  const candidateWords = normalizeSpeechText(candidateText);
+  const interviewerWords = new Set(normalizeSpeechText(interviewerText));
+  if (candidateWords.length < 4 || interviewerWords.size === 0) return false;
+
+  const overlap = candidateWords.filter((word) => interviewerWords.has(word)).length;
+  return overlap / candidateWords.length >= 0.65;
+};
+
 const buildSpokenDebrief = (report: FeedbackReport): string => {
   const strengths = report.strengths.slice(0, 2).join(' Also, ');
   const growthAreas = report.growthAreas.slice(0, 2).join(' The next thing to improve is ');
@@ -130,6 +148,8 @@ export const InterviewRoomPage = () => {
   const [debriefReport, setDebriefReport] = useState<FeedbackReport | undefined>();
   const [debriefMessages, setDebriefMessages] = useState<DebriefMessage[]>([]);
   const [debriefQuestion, setDebriefQuestion] = useState('');
+  const [lastDecisionLatencyMs, setLastDecisionLatencyMs] = useState<number | undefined>();
+  const [lastVoiceLatencyMs, setLastVoiceLatencyMs] = useState<number | undefined>();
 
   const [showTypedFallback, setShowTypedFallback] = useState(false);
   const [typedMessage, setTypedMessage] = useState('');
@@ -194,12 +214,15 @@ export const InterviewRoomPage = () => {
   const playInterviewerSpeech = useCallback(
     async (text: string, unavailableMessage: string) => {
       try {
+        const voiceStartedAt = performance.now();
         const audioBlob = await synthesizeSpeech(text);
+        setLastVoiceLatencyMs(Math.round(performance.now() - voiceStartedAt));
         await player.play(audioBlob);
       } catch (caught) {
         // Real TTS failed outright (not just slow) — browser speech synthesis is a
         // last-resort fallback so the interviewer still says something audible.
         try {
+          setLastVoiceLatencyMs(undefined);
           await player.speakText(text);
         } catch {
           setError(caught instanceof ApiError ? caught.message : unavailableMessage);
@@ -229,6 +252,7 @@ export const InterviewRoomPage = () => {
           return next;
         });
         setScores(result.scores);
+        setLastDecisionLatencyMs(result.decisionLatencyMs);
         setSession((previous) => (previous ? { ...previous, plan: result.plan } : previous));
         setTurnPhase('idle');
 
@@ -306,6 +330,10 @@ export const InterviewRoomPage = () => {
   const handleLiveSpeechText = useCallback(
     async (text: string) => {
       if (isDebriefLocked || debriefReport) return;
+      const latestAlexText = latestInterviewerMessage(transcript)?.content;
+      if (isSpeaking && isLikelyInterviewerEcho(text, latestAlexText)) {
+        return;
+      }
       if (isProcessing) {
         queueCandidateTurn(text);
         return;
@@ -313,21 +341,27 @@ export const InterviewRoomPage = () => {
       setError(undefined);
       await sendTurn(text);
     },
-    [debriefReport, isDebriefLocked, isProcessing, queueCandidateTurn, sendTurn],
+    [
+      debriefReport,
+      isDebriefLocked,
+      isProcessing,
+      isSpeaking,
+      queueCandidateTurn,
+      sendTurn,
+      transcript,
+    ],
   );
 
   useEffect(() => {
-    // isSpeaking is a hard gate, not just a signal-tuning tweak: the mic must never be
-    // active while the interviewer's own voice is playing, or an echo of that voice
-    // (or background noise) can get misread as the candidate interrupting and cut the
-    // interviewer off mid-sentence. Listening only resumes once playback fully ends.
+    const shouldPauseForSpeaker = isSpeaking && !liveSpeech.isSupported;
+
     if (
       !session ||
       isCompleted ||
       !autoListenEnabled ||
       showTypedFallback ||
       isProcessing ||
-      isSpeaking ||
+      shouldPauseForSpeaker ||
       isEnding ||
       isDebriefLocked ||
       debriefReport ||
@@ -392,7 +426,7 @@ export const InterviewRoomPage = () => {
   const handleEnd = async () => {
     if (!sessionId || isEnding || isCompleted) return;
     setIsEnding(true);
-    setDebriefState('generating');
+    setDebriefState(isConversation ? 'idle' : 'generating');
     setAutoListenEnabled(false);
     player.stop();
     try {
@@ -403,6 +437,12 @@ export const InterviewRoomPage = () => {
       const completed = await endInterview(sessionId);
       setSession(completed);
       setElapsed(formatElapsed(completed.startedAt, completed.endedAt));
+
+      if (completed.mode === 'conversation') {
+        setDebriefState('idle');
+        return;
+      }
+
       const report = await getFeedbackReport(sessionId);
       setDebriefReport(report);
       const spokenDebrief = buildSpokenDebrief(report);
@@ -485,7 +525,7 @@ export const InterviewRoomPage = () => {
     { id: 'problem', label: isConversation ? 'Topic' : 'Problem', icon: BookOpenText },
     { id: 'code', label: 'Code', icon: Code2, disabled: !isCoding },
     { id: 'transcript', label: 'Transcript', icon: MessageSquareText },
-    { id: 'score', label: 'Live read', icon: Activity },
+    { id: 'score', label: 'Live read', icon: Activity, disabled: isConversation },
   ];
 
   return (
@@ -494,7 +534,13 @@ export const InterviewRoomPage = () => {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-signal/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-signal">
-              {isCompleted ? 'Completed interview' : 'Live interview'}
+              {isCompleted
+                ? isConversation
+                  ? 'Completed call'
+                  : 'Completed interview'
+                : isConversation
+                  ? 'Live conversation'
+                  : 'Live interview'}
             </span>
             <span className="rounded-full bg-slatewash px-2.5 py-1 text-[11px] font-semibold text-graphite">
               {MODE_LABEL[session.mode]}
@@ -520,6 +566,16 @@ export const InterviewRoomPage = () => {
             />
             {isCompleted ? 'Ended' : interviewerStatus(avatarState, turnPhase)}
           </div>
+          {lastDecisionLatencyMs !== undefined && !isCompleted && (
+            <div className="hidden rounded-md border border-white/10 bg-canvas px-3 py-2 text-xs font-medium text-graphite lg:block">
+              Brain {(lastDecisionLatencyMs / 1000).toFixed(1)}s
+            </div>
+          )}
+          {lastVoiceLatencyMs !== undefined && !isCompleted && (
+            <div className="hidden rounded-md border border-white/10 bg-canvas px-3 py-2 text-xs font-medium text-graphite lg:block">
+              Voice {(lastVoiceLatencyMs / 1000).toFixed(1)}s
+            </div>
+          )}
         </div>
       </div>
 
@@ -665,14 +721,16 @@ export const InterviewRoomPage = () => {
           <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-canvas/80 px-4 py-3 shadow-2xl backdrop-blur">
             {isCompleted ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/interview/${session.id}/report`)}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-signal px-5 text-sm font-semibold text-canvas shadow-glow transition hover:brightness-110"
-                >
-                  <BookOpenText size={17} aria-hidden="true" />
-                  Report
-                </button>
+                {!isConversation && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/interview/${session.id}/report`)}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-signal px-5 text-sm font-semibold text-canvas shadow-glow transition hover:brightness-110"
+                  >
+                    <BookOpenText size={17} aria-hidden="true" />
+                    Report
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate('/dashboard')}
@@ -722,8 +780,8 @@ export const InterviewRoomPage = () => {
                   onClick={handleEnd}
                   disabled={isEnding || Boolean(debriefReport)}
                   className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-red-400/30 bg-red-400/15 text-red-200 transition hover:bg-red-400/25 disabled:cursor-not-allowed disabled:opacity-60"
-                  aria-label="End interview"
-                  title="End interview"
+                  aria-label={isConversation ? 'End call' : 'End interview'}
+                  title={isConversation ? 'End call' : 'End interview'}
                 >
                   {isEnding ? (
                     <Loader2 className="animate-spin" size={18} aria-hidden="true" />

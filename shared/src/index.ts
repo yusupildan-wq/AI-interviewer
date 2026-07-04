@@ -358,6 +358,7 @@ export interface SubmitTurnResponse {
   decision: DecisionEngineOutput;
   scores: ScoreRubric;
   plan: InterviewPlan;
+  decisionLatencyMs: number;
 }
 
 export interface TranscribeAudioResponse {

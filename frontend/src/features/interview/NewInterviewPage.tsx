@@ -39,7 +39,7 @@ const MODES: { value: InterviewMode; label: string; description: string; icon: t
   {
     value: 'resume-deep-dive',
     label: 'Resume Deep Dive',
-    description: 'Goes deep on a project you bring up — justify every choice.',
+    description: 'Goes deep on a project you bring up - justify every choice.',
     icon: Briefcase,
   },
 ];
@@ -54,7 +54,7 @@ const STRICTNESS_LEVELS: {
     value: 'coffee-chat',
     label: 'Coffee Chat',
     description:
-      'Relaxed and conversational. Tangents are fine — gently steered back, never cut off.',
+      'Relaxed and conversational. Tangents are fine - gently steered back, never cut off.',
     icon: Coffee,
   },
   {
@@ -138,7 +138,7 @@ export const NewInterviewPage = () => {
       navigate(`/interview/${session.id}`);
     } catch (caught) {
       setError(
-        caught instanceof ApiError ? caught.message : 'Could not start the interview. Try again.',
+        caught instanceof ApiError ? caught.message : 'Could not start the session. Try again.',
       );
       setIsStarting(false);
     }
@@ -146,11 +146,11 @@ export const NewInterviewPage = () => {
 
   return (
     <section className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-      <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">New interview</p>
-      <h1 className="mt-3 text-4xl font-bold text-ink">Choose how you want to be interviewed</h1>
+      <p className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">New session</p>
+      <h1 className="mt-3 text-4xl font-bold text-ink">Choose how you want to talk with Alex</h1>
       <p className="mt-4 max-w-2xl leading-7 text-graphite">
-        Alex Chen, your interviewer, will run the session like a real FAANG loop: mostly listening,
-        speaking only when it matters.
+        Use a realistic interview loop when you want pressure, or start a normal conversation when
+        you want to talk without a problem prompt.
       </p>
 
       {profile && (
@@ -196,11 +196,12 @@ export const NewInterviewPage = () => {
 
       <div className="mt-8">
         <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-signal">
-          Interview style
+          {mode === 'conversation' ? 'Conversation style' : 'Interview style'}
         </h2>
         <p className="mt-1 text-sm text-graphite">
-          How much pressure Alex applies. Every level still redirects you if you wander off-topic —
-          Coffee Chat just gives you a lot more room before that happens.
+          {mode === 'conversation'
+            ? 'How Alex carries the call. Conversation mode stays casual and does not score you.'
+            : 'How much pressure Alex applies. Every level still redirects you if you wander off-topic - Coffee Chat just gives you a lot more room before that happens.'}
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           {STRICTNESS_LEVELS.map((level) => {
@@ -285,7 +286,11 @@ export const NewInterviewPage = () => {
         disabled={isStarting}
         className="mt-8 inline-flex items-center justify-center rounded-md bg-signal px-6 py-3 text-sm font-semibold text-canvas shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isStarting ? 'Starting…' : 'Start interview'}
+        {isStarting
+          ? 'Starting...'
+          : mode === 'conversation'
+            ? 'Start conversation'
+            : 'Start interview'}
       </button>
     </section>
   );

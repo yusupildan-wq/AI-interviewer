@@ -48,8 +48,12 @@ The frontend runs on `http://localhost:5173` and the backend runs on `http://loc
 - `npm run build` builds all workspaces.
 - `npm run lint` runs ESLint across all workspaces.
 - `npm run typecheck` runs TypeScript checks across all workspaces.
+- `npm run eval:ai` runs deterministic AI behavior regression checks.
+- `npm run verify` runs the full safety gate: AI evals, typecheck, lint, format check, and build.
 - `npm run format` formats the repository with Prettier.
 
 ## Current Scope
 
-This foundation includes a landing page, dashboard shell, health endpoint, shared health contract, environment configuration, linting, formatting, and scalable feature-based folders. Interview features are intentionally not implemented yet.
+This project has moved beyond the initial scaffold. It now includes authenticated interview sessions, PostgreSQL persistence, a live interview room, conversation mode, voice integration, adaptive interviewer behavior, scoring, coaching reports, progress history, and AI behavior regression evals.
+
+See `docs/ai-development-loop.md` for the workflow used to keep improving the interviewer without breaking existing behavior.

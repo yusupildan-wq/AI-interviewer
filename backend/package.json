@@ -9,6 +9,8 @@
     "start": "node dist/server.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "eval:decision-engine": "tsx src/evals/decision-engine.eval.ts",
+    "eval:scoring": "tsx src/evals/scoring.eval.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio"

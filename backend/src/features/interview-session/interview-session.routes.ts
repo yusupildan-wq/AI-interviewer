@@ -187,7 +187,9 @@ interviewSessionRouter.post(
       previousInterventions,
     };
 
+    const decisionStartedAt = performance.now();
     const decision = await runDecisionEngine(decisionInput);
+    const decisionLatencyMs = Math.round(performance.now() - decisionStartedAt);
 
     const sessionAfterScoring = await applyScoreImpact(sessionId, decision.scoreImpact);
 
@@ -210,6 +212,7 @@ interviewSessionRouter.post(
       decision,
       scores: sessionAfterScoring.scores,
       plan: sessionAfterPlanUpdate.plan,
+      decisionLatencyMs,
     };
 
     response.json(result);
@@ -238,6 +241,10 @@ interviewSessionRouter.get(
       throw new HttpError(409, 'End the interview before requesting a feedback report.');
     }
 
+    if (session.mode === 'conversation') {
+      throw new HttpError(409, 'Conversation sessions do not generate interview reports.');
+    }
+
     const cached = await findCachedFeedbackReport(sessionId);
     if (cached) {
       response.json(cached);
@@ -261,6 +268,10 @@ interviewSessionRouter.post(
     const session = await requireOwnedSession(sessionId, user.id);
     if (session.status !== 'completed') {
       throw new HttpError(409, 'End the interview before asking report follow-up questions.');
+    }
+
+    if (session.mode === 'conversation') {
+      throw new HttpError(409, 'Conversation sessions do not generate interview reports.');
     }
 
     let report = await findCachedFeedbackReport(sessionId);

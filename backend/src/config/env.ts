@@ -45,6 +45,10 @@ export const env = {
   decisionEngineModel: process.env.DECISION_ENGINE_MODEL ?? 'gpt-4o-mini',
   // Safety net only, in case the model call genuinely hangs — not a routine truncation.
   decisionEngineTimeoutMs: parsePositiveInteger(process.env.DECISION_ENGINE_TIMEOUT_MS, 10000),
+  conversationEngineTimeoutMs: parsePositiveInteger(
+    process.env.CONVERSATION_ENGINE_TIMEOUT_MS,
+    2200,
+  ),
   speechToTextModel: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
   voiceProvider: process.env.VOICE_PROVIDER ?? 'openai',
   openaiTextToSpeechModel: process.env.OPENAI_TTS_MODEL ?? 'gpt-4o-mini-tts',

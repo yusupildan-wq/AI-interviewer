@@ -205,9 +205,15 @@ const HistoryTable = ({
         <ul className="divide-y divide-white/10">
           {filtered.map((session) => {
             const to =
-              session.status === 'completed'
+              session.status === 'completed' && session.mode !== 'conversation'
                 ? `/interview/${session.id}/report`
                 : `/interview/${session.id}`;
+            const statusLabel =
+              session.status === 'completed'
+                ? session.mode === 'conversation'
+                  ? 'Ended'
+                  : `${averageScore(session.scores)}/100`
+                : 'Continue';
             return (
               <li
                 key={session.id}
@@ -230,9 +236,7 @@ const HistoryTable = ({
                       : 'bg-amberline/15 text-amberline',
                   ].join(' ')}
                 >
-                  {session.status === 'completed'
-                    ? `${averageScore(session.scores)}/100`
-                    : 'Continue'}
+                  {statusLabel}
                 </span>
                 <Link
                   to={to}

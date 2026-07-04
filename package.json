@@ -16,6 +16,8 @@
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "eval:ai": "npm run eval:decision-engine -w backend && npm run eval:scoring -w backend",
+    "verify": "npm run eval:ai && npm run typecheck && npm run lint && npm run format:check && npm run build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

@@ -53,9 +53,11 @@ export const createInterviewMemory = (mode: InterviewMode): InterviewMemory => (
   repeatedMistakes: [],
   notableMentions: [],
   nextBestProbe:
-    mode === 'coding'
-      ? 'Listen for assumptions, approach, complexity, and edge-case handling.'
-      : 'Listen for specific decisions, constraints, tradeoffs, and measurable outcomes.',
+    mode === 'conversation'
+      ? 'Follow the latest thing the user said naturally.'
+      : mode === 'coding'
+        ? 'Listen for assumptions, approach, complexity, and edge-case handling.'
+        : 'Listen for specific decisions, constraints, tradeoffs, and measurable outcomes.',
   rubricV2: baselineRubricV2(),
   evidence: [],
   updatedAt: new Date().toISOString(),
@@ -117,6 +119,19 @@ export const updateInterviewMemory = (
   const explained = [...memory.explainedConcepts];
   const mistakes = [...memory.repeatedMistakes];
   let rubric = memory.rubricV2;
+
+  if (mode === 'conversation') {
+    const notableMentions = decision.notableMention
+      ? unique([...memory.notableMentions, decision.notableMention], 8)
+      : memory.notableMentions;
+
+    return {
+      ...memory,
+      notableMentions,
+      nextBestProbe: 'Follow the latest thing the user said naturally.',
+      updatedAt: new Date().toISOString(),
+    };
+  }
 
   const add = (
     type: EvidenceType,
