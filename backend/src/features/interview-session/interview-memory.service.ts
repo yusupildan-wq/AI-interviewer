@@ -121,9 +121,15 @@ export const updateInterviewMemory = (
   let rubric = memory.rubricV2;
 
   if (mode === 'conversation') {
-    const notableMentions = decision.notableMention
-      ? unique([...memory.notableMentions, decision.notableMention], 8)
-      : memory.notableMentions;
+    if (!decision.notableMention) {
+      return memory;
+    }
+
+    if (memory.notableMentions.includes(decision.notableMention)) {
+      return memory;
+    }
+
+    const notableMentions = unique([...memory.notableMentions, decision.notableMention], 8);
 
     return {
       ...memory,

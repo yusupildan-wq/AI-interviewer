@@ -289,7 +289,7 @@ export const applyInterviewMemoryUpdate = async (
   currentCode: string | undefined,
 ): Promise<InterviewSession> => {
   const session = await requireActiveSession(sessionId);
-  session.memory = updateInterviewMemory(
+  const nextMemory = updateInterviewMemory(
     session.memory,
     session.mode,
     session.transcript,
@@ -297,8 +297,17 @@ export const applyInterviewMemoryUpdate = async (
     decision,
     currentCode,
   );
+
+  if (nextMemory === session.memory) {
+    return session;
+  }
+
+  session.memory = nextMemory;
   return sessionRepository.save(session);
 };
+
+export const hasScoreImpact = (impact: ScoreRubric): boolean =>
+  Object.values(impact).some((value) => value !== 0);
 
 export const applyScoreImpact = async (
   sessionId: string,

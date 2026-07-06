@@ -155,12 +155,13 @@ export const transcribeAudio = async (audio: Blob): Promise<TranscribeAudioRespo
   return response.json() as Promise<TranscribeAudioResponse>;
 };
 
-export const synthesizeSpeech = async (text: string): Promise<Blob> => {
+export const synthesizeSpeech = async (text: string, signal?: AbortSignal): Promise<Blob> => {
   const response = await fetch(`${API_BASE_URL}/voice/speak`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
+    signal,
   });
 
   if (!response.ok) {

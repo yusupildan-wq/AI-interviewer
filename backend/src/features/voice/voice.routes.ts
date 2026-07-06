@@ -31,8 +31,8 @@ voiceRouter.post(
       throw new HttpError(400, 'Request must include text to synthesize.');
     }
 
-    const audio = await synthesizeSpeech(body.text);
-    response.setHeader('Content-Type', 'audio/wav');
-    response.send(audio);
+    const speech = await synthesizeSpeech(body.text);
+    response.setHeader('Content-Type', speech.contentType);
+    response.send(speech.audio);
   }),
 );

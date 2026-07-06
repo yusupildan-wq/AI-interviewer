@@ -37,6 +37,9 @@ They currently protect conversation mode against:
 - casual conversation being scored
 - conversation-mode prompt rules leaking into coding mode
 - slow conversation fallback budgets drifting above live-call speed
+- turn-taking silence windows drifting back above human-call speed
+- echo filtering dropping real candidate interruptions or accepting Alex playback
+- OpenAI speech output drifting back to bulky uncompressed audio
 
 They also protect final scoring against shallow sessions looking average:
 
@@ -64,4 +67,4 @@ This runs AI evals, TypeScript, ESLint, Prettier check, and production builds.
 - Interview-mode latency fallbacks should stay specific to the candidate's latest message.
 - Ending an interview must freeze the timer and stop listening.
 - Conversation mode must not ask more than one question-only turn in a row.
-- Barge-in echo filtering should reject Alex's own speech without losing the candidate's next turn.
+- Browser-level speech recognition behavior should be covered with a real component test.

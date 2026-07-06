@@ -33,6 +33,7 @@ import {
   deleteSessionForUser,
   endSession,
   getSession,
+  hasScoreImpact,
   listSessionsForUser,
 } from './session.service.js';
 
@@ -191,7 +192,9 @@ interviewSessionRouter.post(
     const decision = await runDecisionEngine(decisionInput);
     const decisionLatencyMs = Math.round(performance.now() - decisionStartedAt);
 
-    const sessionAfterScoring = await applyScoreImpact(sessionId, decision.scoreImpact);
+    const sessionAfterScoring = hasScoreImpact(decision.scoreImpact)
+      ? await applyScoreImpact(sessionId, decision.scoreImpact)
+      : sessionAfterPlanUpdate;
 
     let interventionEntry: TranscriptEntry | undefined;
     if (decision.shouldIntervene && decision.messageToCandidate) {

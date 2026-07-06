@@ -153,7 +153,7 @@ export const runDecisionEngine = async (
       // A tight cap on top of the prompt's own brevity instruction — generation time
       // scales directly with completion length, and this is on the reply-latency
       // critical path (the TTS call that follows can't start until this returns).
-      maxCompletionTokens: 300,
+      maxCompletionTokens: 180,
       jsonSchemaName: 'interviewer_decision',
       jsonSchema: decisionEngineJsonSchema,
       messages: [

@@ -270,8 +270,12 @@ const evalConversationMentionExtraction = (): void => {
 
 const evalConversationLatencyBudget = (): void => {
   assert(
-    env.conversationEngineTimeoutMs <= 2200,
+    env.conversationEngineTimeoutMs <= 1600,
     'Conversation fallback timeout must stay fast enough for a live call.',
+  );
+  assert(
+    env.decisionEngineTimeoutMs <= 3500,
+    'Structured interview fallback timeout must avoid long thinking dead air.',
   );
 };
 

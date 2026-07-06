@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RECORDER_SILENCE_TURN_MS } from '@ai-interviewer/shared';
 
 const PREFERRED_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
 const SILENCE_THRESHOLD = 0.035;
 // Long enough that a normal thinking pause or breath mid-sentence doesn't get mistaken
 // for "done talking" and cut the candidate off.
-const SILENCE_DELAY_MS = 1100;
 const MIN_SPEECH_MS = 180;
 const MAX_SPEECH_MS = 30_000;
 const SAMPLE_INTERVAL_MS = 50;
@@ -108,7 +108,7 @@ export function useVoiceRecorder() {
         if (!hasHeardSpeech) return;
 
         const hasMinimumSpeech = now - firstSpeechAt >= MIN_SPEECH_MS;
-        const silenceExpired = now - lastSpeechAt >= SILENCE_DELAY_MS;
+        const silenceExpired = now - lastSpeechAt >= RECORDER_SILENCE_TURN_MS;
         const maxDurationExpired = now - firstSpeechAt >= MAX_SPEECH_MS;
 
         if ((hasMinimumSpeech && silenceExpired) || maxDurationExpired) {

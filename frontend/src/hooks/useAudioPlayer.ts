@@ -12,6 +12,7 @@ export function useAudioPlayer() {
   const rafRef = useRef<number | null>(null);
   const resolveRef = useRef<(() => void) | null>(null);
   const speechResolveRef = useRef<(() => void) | null>(null);
+  const speechGenerationRef = useRef(0);
 
   const stopLevelLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -42,6 +43,7 @@ export function useAudioPlayer() {
     (blob: Blob): Promise<void> => {
       return new Promise((resolve, reject) => {
         audioRef.current?.pause();
+        speechGenerationRef.current += 1;
         window.speechSynthesis?.cancel();
         speechResolveRef.current?.();
         speechResolveRef.current = null;
@@ -116,6 +118,7 @@ export function useAudioPlayer() {
 
   const stop = useCallback(() => {
     audioRef.current?.pause();
+    speechGenerationRef.current += 1;
     window.speechSynthesis?.cancel();
     setIsSpeaking(false);
     stopLevelLoop();
@@ -134,6 +137,8 @@ export function useAudioPlayer() {
         }
 
         audioRef.current?.pause();
+        speechGenerationRef.current += 1;
+        const speechGeneration = speechGenerationRef.current;
         resolveRef.current?.();
         resolveRef.current = null;
         stopLevelLoop();
@@ -154,14 +159,17 @@ export function useAudioPlayer() {
 
         speechResolveRef.current = resolve;
         utterance.onstart = () => {
+          if (speechGeneration !== speechGenerationRef.current) return;
           setIsSpeaking(true);
         };
         utterance.onend = () => {
+          if (speechGeneration !== speechGenerationRef.current) return;
           setIsSpeaking(false);
           speechResolveRef.current = null;
           resolve();
         };
         utterance.onerror = () => {
+          if (speechGeneration !== speechGenerationRef.current) return;
           setIsSpeaking(false);
           speechResolveRef.current = null;
           reject(new Error('Browser speech synthesis failed.'));

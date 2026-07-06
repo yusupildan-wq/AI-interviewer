@@ -8,6 +8,38 @@ export type HealthStatus = {
 export const APP_NAME = 'AI Interviewer';
 
 // ---------------------------------------------------------------------------
+// Realtime call behavior
+// ---------------------------------------------------------------------------
+
+export const CONVERSATION_SILENCE_TURN_MS = 650;
+export const INTERVIEW_SILENCE_TURN_MS = 850;
+export const RECORDER_SILENCE_TURN_MS = 850;
+export const AI_BACKCHANNEL_DELAY_MS = 750;
+export const TTS_FALLBACK_TIMEOUT_MS = 1500;
+
+export const normalizeSpeechText = (value: string): string[] =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2);
+
+export const isLikelySpeakerEcho = (
+  candidateText: string,
+  speakerText?: string,
+  overlapThreshold = 0.65,
+): boolean => {
+  if (!speakerText) return false;
+
+  const candidateWords = normalizeSpeechText(candidateText);
+  const speakerWords = new Set(normalizeSpeechText(speakerText));
+  if (candidateWords.length < 4 || speakerWords.size === 0) return false;
+
+  const overlap = candidateWords.filter((word) => speakerWords.has(word)).length;
+  return overlap / candidateWords.length >= overlapThreshold;
+};
+
+// ---------------------------------------------------------------------------
 // Interview domain
 // ---------------------------------------------------------------------------
 

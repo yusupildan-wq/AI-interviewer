@@ -9,8 +9,10 @@
     "start": "node dist/server.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "eval:decision-engine": "tsx src/evals/decision-engine.eval.ts",
-    "eval:scoring": "tsx src/evals/scoring.eval.ts",
+    "eval:decision-engine": "tsx --conditions development src/evals/decision-engine.eval.ts",
+    "eval:realtime-call": "tsx --conditions development src/evals/realtime-call.eval.ts",
+    "eval:scoring": "tsx --conditions development src/evals/scoring.eval.ts",
+    "eval:voice": "tsx --conditions development src/evals/voice.eval.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio"

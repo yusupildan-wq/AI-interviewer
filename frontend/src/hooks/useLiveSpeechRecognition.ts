@@ -1,3 +1,4 @@
+import { INTERVIEW_SILENCE_TURN_MS } from '@ai-interviewer/shared';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 type SpeechRecognitionResultLike = {
@@ -41,6 +42,7 @@ type SpeechWindow = Window & {
 
 type StartOptions = {
   onFinalTranscript: (text: string) => void;
+  silenceTurnMs?: number;
 };
 
 const getSpeechRecognitionConstructor = (): SpeechRecognitionConstructor | undefined => {
@@ -129,7 +131,7 @@ export function useLiveSpeechRecognition() {
         // this is just the backstop for when that native signal doesn't come.
         interimTimerRef.current = window.setTimeout(() => {
           finish(trimmedInterim);
-        }, 1100);
+        }, options.silenceTurnMs ?? INTERVIEW_SILENCE_TURN_MS);
       }
     };
 

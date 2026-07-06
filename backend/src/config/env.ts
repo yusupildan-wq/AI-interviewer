@@ -44,10 +44,10 @@ export const env = {
   // fell back to a generic reply; OpenAI held up over 5 rapid-fire requests in testing.
   decisionEngineModel: process.env.DECISION_ENGINE_MODEL ?? 'gpt-4o-mini',
   // Safety net only, in case the model call genuinely hangs — not a routine truncation.
-  decisionEngineTimeoutMs: parsePositiveInteger(process.env.DECISION_ENGINE_TIMEOUT_MS, 10000),
+  decisionEngineTimeoutMs: parsePositiveInteger(process.env.DECISION_ENGINE_TIMEOUT_MS, 3500),
   conversationEngineTimeoutMs: parsePositiveInteger(
     process.env.CONVERSATION_ENGINE_TIMEOUT_MS,
-    2200,
+    1600,
   ),
   speechToTextModel: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
   voiceProvider: process.env.VOICE_PROVIDER ?? 'openai',

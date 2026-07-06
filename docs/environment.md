@@ -12,8 +12,8 @@ The root `.env.example` documents the complete local environment. App-specific e
 - `GROQ_API_KEY`: Used for speech-to-text (Whisper) only. Groq has a free tier: https://console.groq.com/keys.
 - `STT_MODEL`: Groq Whisper model used to transcribe candidate speech. Defaults to `whisper-large-v3-turbo`.
 - `DECISION_ENGINE_MODEL`: OpenAI model used for interviewer decisions and feedback generation. Defaults to `gpt-4o-mini`. Moved off Groq because Groq's free-tier TPM cap throttled after 1-2 real conversational turns; OpenAI held up over repeated rapid requests in testing.
-- `DECISION_ENGINE_TIMEOUT_MS`: Safety-net timeout (ms) for a single decision-engine call before falling back to a generic reply — not a routine truncation. Defaults to `10000`.
-- `CONVERSATION_ENGINE_TIMEOUT_MS`: Faster safety-net timeout (ms) for Conversation Mode's lightweight reply path. Defaults to `2200`.
+- `DECISION_ENGINE_TIMEOUT_MS`: Safety-net timeout (ms) for a single decision-engine call before falling back to a short momentum-preserving reply. Defaults to `3500`.
+- `CONVERSATION_ENGINE_TIMEOUT_MS`: Faster safety-net timeout (ms) for Conversation Mode's lightweight reply path. Defaults to `1600`.
 - `VOICE_PROVIDER`: Text-to-speech provider. Defaults to `openai` for the most natural interviewer voice. Set to `groq` only for the older Groq/Orpheus path.
 - `OPENAI_API_KEY`: Required for the Interviewer Decision Engine, feedback generation, and (when `VOICE_PROVIDER=openai`) text-to-speech.
 - `OPENAI_TTS_MODEL`: OpenAI text-to-speech model. Defaults to `gpt-4o-mini-tts`.

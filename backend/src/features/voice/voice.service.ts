@@ -9,6 +9,13 @@ const MAX_TTS_CHARS = 2000;
 // longer end-of-interview spoken debrief — sized for the debrief, not the turn.
 const MAX_SPOKEN_CHARS = 700;
 const OPENAI_SPEECH_ENDPOINT = 'https://api.openai.com/v1/audio/speech';
+const OPENAI_SPEECH_RESPONSE_FORMAT = 'mp3';
+const GROQ_SPEECH_RESPONSE_FORMAT = 'wav';
+
+export type SynthesizedSpeech = {
+  audio: Buffer;
+  contentType: string;
+};
 
 const prepareTextForSpeech = (text: string): string =>
   text
@@ -41,7 +48,7 @@ export const transcribeAudio = async (audio: Buffer, contentType: string): Promi
   }
 };
 
-export const synthesizeSpeech = async (text: string): Promise<Buffer> => {
+export const synthesizeSpeech = async (text: string): Promise<SynthesizedSpeech> => {
   const trimmed = prepareTextForSpeech(text).slice(0, MAX_TTS_CHARS);
 
   if (!trimmed) {
@@ -55,7 +62,7 @@ export const synthesizeSpeech = async (text: string): Promise<Buffer> => {
   return synthesizeGroqSpeech(trimmed);
 };
 
-const synthesizeOpenAiSpeech = async (text: string): Promise<Buffer> => {
+const synthesizeOpenAiSpeech = async (text: string): Promise<SynthesizedSpeech> => {
   if (!env.openaiApiKey) {
     throw new HttpError(500, 'OPENAI_API_KEY is required for OpenAI text-to-speech.');
   }
@@ -71,7 +78,7 @@ const synthesizeOpenAiSpeech = async (text: string): Promise<Buffer> => {
       voice: env.openaiTextToSpeechVoice,
       input: text,
       instructions: env.openaiTextToSpeechInstructions,
-      response_format: 'wav',
+      response_format: OPENAI_SPEECH_RESPONSE_FORMAT,
     }),
   });
 
@@ -81,10 +88,13 @@ const synthesizeOpenAiSpeech = async (text: string): Promise<Buffer> => {
     throw new HttpError(status, `OpenAI text-to-speech request failed: ${message}`);
   }
 
-  return Buffer.from(await response.arrayBuffer());
+  return {
+    audio: Buffer.from(await response.arrayBuffer()),
+    contentType: 'audio/mpeg',
+  };
 };
 
-const synthesizeGroqSpeech = async (text: string): Promise<Buffer> => {
+const synthesizeGroqSpeech = async (text: string): Promise<SynthesizedSpeech> => {
   const client = getGroqClient();
 
   try {
@@ -92,10 +102,13 @@ const synthesizeGroqSpeech = async (text: string): Promise<Buffer> => {
       model: env.textToSpeechModel,
       voice: env.textToSpeechVoice,
       input: text,
-      response_format: 'wav',
+      response_format: GROQ_SPEECH_RESPONSE_FORMAT,
     });
     const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return {
+      audio: Buffer.from(arrayBuffer),
+      contentType: 'audio/wav',
+    };
   } catch (caught) {
     if (caught instanceof Groq.APIError) {
       const status =

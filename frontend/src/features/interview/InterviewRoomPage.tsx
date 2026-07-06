@@ -5,6 +5,13 @@ import type {
   ScoreRubric,
   TranscriptEntry,
 } from '@ai-interviewer/shared';
+import {
+  AI_BACKCHANNEL_DELAY_MS,
+  CONVERSATION_SILENCE_TURN_MS,
+  INTERVIEW_SILENCE_TURN_MS,
+  TTS_FALLBACK_TIMEOUT_MS,
+  isLikelySpeakerEcho,
+} from '@ai-interviewer/shared';
 import Editor from '@monaco-editor/react';
 import {
   Activity,
@@ -20,7 +27,7 @@ import {
   PhoneOff,
   Send,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { useAudioPlayer } from '../../hooks/useAudioPlayer';
@@ -56,6 +63,7 @@ type SidePanel = 'problem' | 'code' | 'transcript' | 'score';
 type DebriefState = 'idle' | 'generating' | 'speaking' | 'ready' | 'answering';
 type DebriefMessage = { role: 'candidate' | 'interviewer'; content: string };
 type TurnPhase = 'idle' | 'transcribing' | 'thinking';
+type TimeoutError = Error & { name: 'TimeoutError' };
 
 const formatElapsed = (startedAt: string, endedAt?: string): string => {
   const endTime = endedAt ? new Date(endedAt).getTime() : Date.now();
@@ -78,10 +86,10 @@ const STAGE_LABEL: Record<InterviewStage, string> = {
 };
 
 const interviewerStatus = (state: AvatarState, phase: TurnPhase): string => {
-  if (phase === 'thinking') return 'Listening';
-  if (phase === 'transcribing') return 'Listening';
+  if (phase === 'thinking') return 'Responding';
+  if (phase === 'transcribing') return 'Catching that';
   if (state === 'listening') return 'Listening';
-  if (state === 'thinking') return 'Ready';
+  if (state === 'thinking') return 'Responding';
   if (state === 'speaking') return 'Speaking';
   return 'Ready';
 };
@@ -92,22 +100,10 @@ const latestInterviewerMessage = (transcript: TranscriptEntry[]): TranscriptEntr
     .reverse()
     .find((entry) => entry.role === 'interviewer');
 
-const normalizeSpeechText = (value: string): string[] =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((word) => word.length > 2);
-
-const isLikelyInterviewerEcho = (candidateText: string, interviewerText?: string): boolean => {
-  if (!interviewerText) return false;
-
-  const candidateWords = normalizeSpeechText(candidateText);
-  const interviewerWords = new Set(normalizeSpeechText(interviewerText));
-  if (candidateWords.length < 4 || interviewerWords.size === 0) return false;
-
-  const overlap = candidateWords.filter((word) => interviewerWords.has(word)).length;
-  return overlap / candidateWords.length >= 0.65;
+const timeoutError = (message: string): TimeoutError => {
+  const error = new Error(message) as TimeoutError;
+  error.name = 'TimeoutError';
+  return error;
 };
 
 const buildSpokenDebrief = (report: FeedbackReport): string => {
@@ -159,6 +155,7 @@ export const InterviewRoomPage = () => {
   const liveSpeech = useLiveSpeechRecognition();
   const player = useAudioPlayer();
   const isSpeaking = player.isSpeaking;
+  const spokenEchoTextsRef = useRef<string[]>([]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -211,25 +208,46 @@ export const InterviewRoomPage = () => {
     setQueuedTurn((previous) => (previous ? `${previous}\n${trimmed}` : trimmed));
   }, []);
 
+  const rememberSpokenText = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    spokenEchoTextsRef.current = [trimmed, ...spokenEchoTextsRef.current].slice(0, 4);
+  }, []);
+
   const playInterviewerSpeech = useCallback(
     async (text: string, unavailableMessage: string) => {
+      rememberSpokenText(text);
+      const controller = new AbortController();
+      let timeout: number | undefined;
       try {
         const voiceStartedAt = performance.now();
-        const audioBlob = await synthesizeSpeech(text);
+        const audioBlob = await Promise.race([
+          synthesizeSpeech(text, controller.signal),
+          new Promise<never>((_, reject) => {
+            timeout = window.setTimeout(() => {
+              controller.abort();
+              reject(timeoutError('High-quality speech took too long.'));
+            }, TTS_FALLBACK_TIMEOUT_MS);
+          }),
+        ]);
         setLastVoiceLatencyMs(Math.round(performance.now() - voiceStartedAt));
         await player.play(audioBlob);
       } catch (caught) {
-        // Real TTS failed outright (not just slow) — browser speech synthesis is a
-        // last-resort fallback so the interviewer still says something audible.
+        // Real TTS failed or missed the live-call latency budget. Browser speech is
+        // less polished, but it keeps the call moving instead of leaving dead air.
         try {
           setLastVoiceLatencyMs(undefined);
           await player.speakText(text);
         } catch {
           setError(caught instanceof ApiError ? caught.message : unavailableMessage);
         }
+      } finally {
+        if (timeout !== undefined) {
+          window.clearTimeout(timeout);
+        }
       }
     },
-    [player],
+    [player, rememberSpokenText],
   );
 
   const sendTurn = useCallback(
@@ -237,12 +255,24 @@ export const InterviewRoomPage = () => {
       if (!sessionId) return;
       player.stop();
       setTurnPhase('thinking');
+      let backchannelTimer: number | undefined;
 
       try {
+        backchannelTimer = window.setTimeout(() => {
+          const acknowledgement = isConversation ? 'Yeah, I hear you.' : 'Got it.';
+          rememberSpokenText(acknowledgement);
+          void player.speakText(acknowledgement).catch(() => undefined);
+        }, AI_BACKCHANNEL_DELAY_MS);
+
         const result = await submitTurn(sessionId, {
           message: text,
           code: isCoding ? code : undefined,
         });
+
+        if (backchannelTimer !== undefined) {
+          window.clearTimeout(backchannelTimer);
+          backchannelTimer = undefined;
+        }
 
         setTranscript((previous) => {
           const next = [...previous, result.transcriptEntry];
@@ -263,6 +293,10 @@ export const InterviewRoomPage = () => {
           );
         }
       } catch (caught) {
+        if (backchannelTimer !== undefined) {
+          window.clearTimeout(backchannelTimer);
+          backchannelTimer = undefined;
+        }
         setError(
           caught instanceof ApiError
             ? caught.message
@@ -276,10 +310,13 @@ export const InterviewRoomPage = () => {
           // The visible error above is enough context for the candidate.
         }
       } finally {
+        if (backchannelTimer !== undefined) {
+          window.clearTimeout(backchannelTimer);
+        }
         setTurnPhase('idle');
       }
     },
-    [code, isCoding, playInterviewerSpeech, player, sessionId],
+    [code, isCoding, isConversation, playInterviewerSpeech, player, rememberSpokenText, sessionId],
   );
 
   useEffect(() => {
@@ -331,7 +368,13 @@ export const InterviewRoomPage = () => {
     async (text: string) => {
       if (isDebriefLocked || debriefReport) return;
       const latestAlexText = latestInterviewerMessage(transcript)?.content;
-      if (isSpeaking && isLikelyInterviewerEcho(text, latestAlexText)) {
+      const possibleEchoes = latestAlexText
+        ? [latestAlexText, ...spokenEchoTextsRef.current]
+        : spokenEchoTextsRef.current;
+      if (
+        isSpeaking &&
+        possibleEchoes.some((spokenText) => isLikelySpeakerEcho(text, spokenText))
+      ) {
         return;
       }
       if (isProcessing) {
@@ -377,6 +420,7 @@ export const InterviewRoomPage = () => {
         onFinalTranscript: (text) => {
           void handleLiveSpeechText(text);
         },
+        silenceTurnMs: isConversation ? CONVERSATION_SILENCE_TURN_MS : INTERVIEW_SILENCE_TURN_MS,
       });
       return;
     }
@@ -391,6 +435,7 @@ export const InterviewRoomPage = () => {
     handleVoiceBlob,
     handleLiveSpeechText,
     isCompleted,
+    isConversation,
     isDebriefLocked,
     isEnding,
     isProcessing,
@@ -487,15 +532,16 @@ export const InterviewRoomPage = () => {
     }
   };
 
-  const avatarState: AvatarState = recorder.isRecording
-    ? 'listening'
-    : liveSpeech.isListening
-      ? 'listening'
-      : isSpeaking
-        ? 'speaking'
-        : debriefState === 'generating' || debriefState === 'answering'
-          ? 'thinking'
-          : 'idle';
+  const avatarState: AvatarState = isSpeaking
+    ? 'speaking'
+    : turnPhase === 'thinking' ||
+        turnPhase === 'transcribing' ||
+        debriefState === 'generating' ||
+        debriefState === 'answering'
+      ? 'thinking'
+      : recorder.isRecording || liveSpeech.isListening
+        ? 'listening'
+        : 'idle';
 
   const combinedError = error ?? liveSpeech.error ?? recorder.error;
   const latestPrompt = latestInterviewerMessage(transcript);
@@ -880,13 +926,17 @@ export const InterviewRoomPage = () => {
           )}
           {isCompleted
             ? 'Ended'
-            : autoListenEnabled
-              ? recorder.isRecording || liveSpeech.isListening
-                ? 'Listening'
-                : liveSpeech.isSupported
-                  ? 'Live mic'
-                  : 'Auto mic'
-              : 'Muted'}
+            : turnPhase === 'thinking'
+              ? 'Responding'
+              : turnPhase === 'transcribing'
+                ? 'Catching that'
+                : autoListenEnabled
+                  ? recorder.isRecording || liveSpeech.isListening
+                    ? 'Listening'
+                    : liveSpeech.isSupported
+                      ? 'Live mic'
+                      : 'Auto mic'
+                  : 'Muted'}
         </div>
       </div>
     </section>

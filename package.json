@@ -16,10 +16,10 @@
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "eval:ai": "npm run eval:decision-engine -w backend && npm run eval:scoring -w backend",
+    "eval:ai": "npm run eval:decision-engine -w backend && npm run eval:realtime-call -w backend && npm run eval:scoring -w backend && npm run eval:voice -w backend",
     "verify": "npm run eval:ai && npm run typecheck && npm run lint && npm run format:check && npm run build",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format": "prettier --write \"*.{json,js,md}\" \".github/**/*.yml\" \"backend/**/*.{ts,json}\" \"docs/**/*.md\" \"frontend/**/*.{ts,tsx,js,json,html,css,md}\" \"shared/**/*.{ts,json}\"",
+    "format:check": "prettier --check \"*.{json,js,md}\" \".github/**/*.yml\" \"backend/**/*.{ts,json}\" \"docs/**/*.md\" \"frontend/**/*.{ts,tsx,js,json,html,css,md}\" \"shared/**/*.{ts,json}\""
   },
   "engines": {
     "node": ">=20.0.0",
